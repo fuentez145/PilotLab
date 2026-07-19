@@ -137,11 +137,13 @@ const jsonLd =
 <style is:global>
 	:root {
 		--ink: #0e1c33;
-		--blue: #2563ff;
+		/* 3% darker than the handoff's #2563ff — smallest step to WCAG AA (4.5:1) on --bg */
+		--blue: #2460f7;
 		--blue-lt: #5b8cff;
 		--bg: #eef1f6;
 		--body: #3c4a63;
-		--muted: #8a97ad;
+		/* darkened from the handoff's #8a97ad to reach WCAG AA for small labels */
+		--muted: #5f6b85;
 		--muted-dark: #8fa0bd;
 		--hairline: rgba(14, 28, 51, 0.2);
 		--hairline-dark: rgba(255, 255, 255, 0.15);

@@ -37,6 +37,8 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 >
 	<Nav active="services" />
 
+	<main>
+
 	<section class="hero">
 		<a href="/services" class="back">← All services</a>
 		<h1 data-rv>{s.title1}<br /><span class="accent">{s.title2}</span></h1>
@@ -101,6 +103,8 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	<section class="cta">
 		<h2 data-rv>{s.cta}<br /><a href="/contact">Let's scope it →</a></h2>
 	</section>
+
+	</main>
 
 	<Footer />
 </Layout>

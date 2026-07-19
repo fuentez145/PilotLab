@@ -9,10 +9,10 @@ import { projects } from '../data/projects';
 const siteUrl = Astro.site!.href.replace(/\/$/, '');
 
 const services = [
-	{ n: '01', name: 'Web applications', desc: 'Complex products shipped with obsessive attention to detail.' },
-	{ n: '02', name: 'Design systems', desc: 'Component libraries your team will love to build with.' },
-	{ n: '03', name: 'E-commerce', desc: 'Storefronts engineered to convert, measured to prove it.' },
-	{ n: '04', name: 'Performance & audits', desc: 'We find the milliseconds everyone else leaves behind.' },
+	{ n: '01', name: 'Web applications', href: '/services/web-applications', desc: 'Complex products shipped with obsessive attention to detail.' },
+	{ n: '02', name: 'E-commerce', href: '/services/e-commerce', desc: 'Storefronts engineered to convert, measured to prove it.' },
+	{ n: '03', name: 'Marketing sites', href: '/services/marketing-sites', desc: 'Brand sites that load instantly and are a joy to edit.' },
+	{ n: '04', name: 'Rescue & performance', href: '/services/rescue-performance', desc: 'We find the milliseconds everyone else leaves behind.' },
 ];
 
 const marquee = ['Web applications', 'Design systems', 'E-commerce', 'Performance'];
@@ -96,7 +96,7 @@ const promises = [
 		</div>
 		{
 			services.map((s) => (
-				<div data-rv class="svc">
+				<a href={s.href} data-rv class="svc">
 					<div class="svc-name">
 						<span class="svc-n">{s.n}</span>
 						<span class="svc-title">{s.name}</span>
@@ -105,7 +105,7 @@ const promises = [
 						<span class="svc-desc">{s.desc}</span>
 						<span class="svc-arrow">→</span>
 					</div>
-				</div>
+				</a>
 			))
 		}
 	</section>
@@ -328,6 +328,7 @@ const promises = [
 		border-bottom: 1.5px solid var(--hairline);
 		cursor: pointer;
 		transition: all 0.25s;
+		color: inherit;
 	}
 	.svc:hover {
 		background: var(--ink);

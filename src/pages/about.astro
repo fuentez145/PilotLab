@@ -7,12 +7,12 @@ import { breadcrumbSchema, faqSchema } from '../data/site';
 import studioImg from '../assets/work/studio.png';
 
 const caps = [
-	{ n: '01', name: 'Web applications', desc: 'Dashboards, SaaS products, internal tools — complex UIs that stay fast at scale.' },
-	{ n: '02', name: 'E-commerce', desc: 'Headless storefronts on Shopify or custom — built to convert and easy to run.' },
-	{ n: '03', name: 'Marketing sites', desc: 'Brand sites that load instantly, rank well, and are a joy to edit.' },
+	{ n: '01', name: 'Web applications', href: '/services/web-applications', desc: 'Dashboards, SaaS products, internal tools — complex UIs that stay fast at scale.' },
+	{ n: '02', name: 'E-commerce', href: '/services/e-commerce', desc: 'Headless storefronts on Shopify or custom — built to convert and easy to run.' },
+	{ n: '03', name: 'Marketing sites', href: '/services/marketing-sites', desc: 'Brand sites that load instantly, rank well, and are a joy to edit.' },
 	{ n: '04', name: 'Design systems', desc: 'Component libraries and style guides your product can grow on for years.' },
 	{ n: '05', name: 'APIs & integrations', desc: 'Payment, CRM, auth, third-party data — glued together cleanly and documented.' },
-	{ n: '06', name: 'Rescue & performance', desc: 'Slow, fragile, or half-finished builds inherited and made solid.' },
+	{ n: '06', name: 'Rescue & performance', href: '/services/rescue-performance', desc: 'Slow, fragile, or half-finished builds inherited and made solid.' },
 ];
 
 const steps = [
@@ -74,13 +74,16 @@ const faqs = [
 		</div>
 		<div class="caps">
 			{
-				caps.map((c) => (
-					<div data-rv class="cap">
-						<div class="cell-n">{c.n}</div>
-						<h3>{c.name}</h3>
-						<p>{c.desc}</p>
-					</div>
-				))
+				caps.map((c) => {
+					const Cell = c.href ? 'a' : 'div';
+					return (
+						<Cell href={c.href} data-rv class="cap">
+							<div class="cell-n">{c.n}</div>
+							<h3>{c.name}</h3>
+							<p>{c.desc}</p>
+						</Cell>
+					);
+				})
 			}
 		</div>
 	</section>
@@ -240,6 +243,13 @@ const faqs = [
 	}
 	.cap:nth-last-child(-n + 3) {
 		border-bottom: none;
+	}
+	.cap {
+		display: block;
+		color: inherit;
+	}
+	a.cap {
+		cursor: pointer;
 	}
 	.cap:hover {
 		background: var(--blue);

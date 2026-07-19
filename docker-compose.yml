@@ -3,8 +3,8 @@ services:
     build: .
     container_name: pilotlab
     restart: unless-stopped
-    networks:
-      - proxy
+    # Traefik runs with network_mode: host on this server, so it reaches this
+    # container via its bridge IP — no shared network needed, default is fine.
     labels:
       - traefik.enable=true
       # Router: apex + www
@@ -18,8 +18,3 @@ services:
       - traefik.http.middlewares.pilotlab-www.redirectregex.replacement=https://pilotlab.cloud/$${1}
       - traefik.http.middlewares.pilotlab-www.redirectregex.permanent=true
       - traefik.http.routers.pilotlab.middlewares=pilotlab-www
-
-networks:
-  # ⚠ must be the external network your Traefik container watches
-  proxy:
-    external: true

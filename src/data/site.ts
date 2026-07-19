@@ -2,7 +2,7 @@
 export const SITE = {
 	name: 'PilotLab',
 	tagline: 'Web, built right',
-	email: 'hello@pilotlab.dev',
+	email: 'hello@pilotlab.cloud',
 	address: {
 		streetAddress: '214 Foundry Street, Floor 3',
 		addressLocality: 'Amsterdam',

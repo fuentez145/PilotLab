@@ -1,0 +1,353 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import { services } from '../../data/services';
+import { breadcrumbSchema, organizationSchema } from '../../data/site';
+
+export function getStaticPaths() {
+	return services.map((s) => ({ params: { slug: s.slug } }));
+}
+
+const { slug } = Astro.params;
+const s = services.find((sv) => sv.slug === slug)!;
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+---
+
+<Layout
+	title={s.seoTitle}
+	description={s.seoDesc}
+	schema={[
+		organizationSchema(siteUrl),
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'Services', path: '/services' },
+			{ name: s.name, path: `/services/${s.slug}` },
+		]),
+		{
+			'@type': 'Service',
+			name: s.name,
+			serviceType: s.name,
+			description: s.intro,
+			url: `${siteUrl}/services/${s.slug}`,
+			provider: { '@id': `${siteUrl}/#organization` },
+			areaServed: 'Worldwide',
+		},
+	]}
+>
+	<Nav active="services" />
+
+	<section class="hero">
+		<a href="/services" class="back">← All services</a>
+		<h1 data-rv>{s.title1}<br /><span class="accent">{s.title2}</span></h1>
+		<p data-rv>{s.intro}</p>
+		<a data-rv href="/contact" class="start">Start the conversation →</a>
+	</section>
+
+	<section class="fits">
+		{
+			s.fits.map((f) => (
+				<div data-rv class="fit">
+					<div class="fit-label">This is for you if</div>
+					<p>{f}</p>
+				</div>
+			))
+		}
+	</section>
+
+	<section class="split">
+		<div data-rv class="steps">
+			<h2 class="kicker">How it works</h2>
+			<div>
+				{
+					s.steps.map((st) => (
+						<div class="step">
+							<span class="step-n">{st.n}</span>
+							<div>
+								<div class="step-name">{st.name}</div>
+								<p>{st.desc}</p>
+							</div>
+						</div>
+					))
+				}
+			</div>
+		</div>
+		<div data-rv class="deliverables">
+			<h2 class="kicker">What you walk away with</h2>
+			<div class="dl-list">
+				{
+					s.deliverables.map((d) => (
+						<div class="dl-item">
+							<span class="diamond">◆</span>
+							<span class="dl-text">{d}</span>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</section>
+
+	<section class="practice">
+		<h2 data-rv class="kicker">See it in practice</h2>
+		<a data-rv href={`/lab/${s.labSlug}`} class="lab-card">
+			<div>
+				<div class="lab-name">{s.labName}</div>
+				<p>{s.labDesc}</p>
+			</div>
+			<span class="lab-arrow">→</span>
+		</a>
+	</section>
+
+	<section class="cta">
+		<h2 data-rv>{s.cta}<br /><a href="/contact">Let's scope it →</a></h2>
+	</section>
+
+	<Footer />
+</Layout>
+
+<style>
+	.hero {
+		padding: 64px 48px 56px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.back {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.back:hover {
+		color: var(--blue);
+	}
+	.hero h1 {
+		font-family: var(--sora);
+		font-size: clamp(46px, 7.2vw, 92px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+		margin-top: 26px;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	.hero p {
+		font-size: 19px;
+		line-height: 1.65;
+		max-width: 600px;
+		margin-top: 30px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+	.start {
+		display: inline-block;
+		margin-top: 36px;
+		padding: 15px 30px;
+		background: var(--blue);
+		color: #fff;
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: all 0.2s;
+	}
+	.start:hover {
+		background: var(--ink);
+		color: #fff;
+		transform: translateY(-2px);
+	}
+
+	.fits {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.fit {
+		padding: 44px 40px;
+		border-right: 1.5px solid var(--ink);
+	}
+	.fit:last-child {
+		border-right: none;
+	}
+	.fit-label {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--blue);
+		margin-bottom: 14px;
+	}
+	.fit p {
+		font-family: var(--sora);
+		font-size: 19px;
+		line-height: 1.4;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+	}
+
+	.split {
+		display: grid;
+		grid-template-columns: 1.1fr minmax(0, 1fr);
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.steps {
+		padding: 64px 48px;
+		border-right: 1.5px solid var(--ink);
+	}
+	.kicker {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--blue);
+		margin-bottom: 22px;
+	}
+	.step {
+		display: flex;
+		gap: 24px;
+		padding: 22px 0;
+		border-bottom: 1.5px solid rgba(14, 28, 51, 0.15);
+	}
+	.step-n {
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--blue);
+		padding-top: 3px;
+	}
+	.step-name {
+		font-family: var(--sora);
+		font-size: 19px;
+		font-weight: 700;
+		margin-bottom: 6px;
+	}
+	.step p {
+		font-size: 14.5px;
+		line-height: 1.6;
+		color: var(--body);
+	}
+	.deliverables {
+		padding: 64px 48px;
+		background: var(--ink);
+		color: #fff;
+	}
+	.deliverables .kicker {
+		color: var(--blue-lt);
+	}
+	.dl-list {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.dl-item {
+		display: flex;
+		align-items: baseline;
+		gap: 14px;
+		border-bottom: 1px solid var(--hairline-dark);
+		padding-bottom: 14px;
+	}
+	.diamond {
+		font-family: var(--sora);
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--blue-lt);
+	}
+	.dl-text {
+		font-size: 15.5px;
+		line-height: 1.5;
+		color: #dbe4f5;
+	}
+
+	.practice {
+		padding: 64px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.practice .kicker {
+		margin-bottom: 18px;
+	}
+	.lab-card {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 24px;
+		border: 1.5px solid var(--ink);
+		padding: 32px 36px;
+		transition: all 0.25s;
+		color: inherit;
+	}
+	.lab-card:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+	.lab-name {
+		font-family: var(--sora);
+		font-size: 26px;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		text-transform: uppercase;
+	}
+	.lab-card p {
+		font-size: 15px;
+		margin-top: 8px;
+		opacity: 0.7;
+	}
+	.lab-arrow {
+		font-size: 26px;
+	}
+
+	.cta {
+		padding: 96px 48px;
+		border-bottom: 1.5px solid var(--ink);
+		background: var(--blue);
+		color: #fff;
+	}
+	.cta h2 {
+		font-family: var(--sora);
+		font-size: clamp(38px, 6.25vw, 80px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.cta a {
+		color: var(--ink);
+	}
+	.cta a:hover {
+		color: #fff;
+	}
+
+	@media (max-width: 900px) {
+		.hero,
+		.steps,
+		.deliverables,
+		.practice,
+		.cta {
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.fits {
+			grid-template-columns: 1fr;
+		}
+		.fit {
+			padding: 32px 20px;
+			border-right: none;
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.fit:last-child {
+			border-bottom: none;
+		}
+		.split {
+			grid-template-columns: 1fr;
+		}
+		.steps {
+			border-right: none;
+		}
+		.lab-card {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+	}
+</style>

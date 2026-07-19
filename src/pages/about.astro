@@ -1,0 +1,432 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import ImageSlot from '../components/ImageSlot.astro';
+import { breadcrumbSchema, faqSchema } from '../data/site';
+
+const caps = [
+	{ n: '01', name: 'Web applications', desc: 'Dashboards, SaaS products, internal tools — complex UIs that stay fast at scale.' },
+	{ n: '02', name: 'E-commerce', desc: 'Headless storefronts on Shopify or custom — built to convert and easy to run.' },
+	{ n: '03', name: 'Marketing sites', desc: 'Brand sites that load instantly, rank well, and are a joy to edit.' },
+	{ n: '04', name: 'Design systems', desc: 'Component libraries and style guides your product can grow on for years.' },
+	{ n: '05', name: 'APIs & integrations', desc: 'Payment, CRM, auth, third-party data — glued together cleanly and documented.' },
+	{ n: '06', name: 'Rescue & performance', desc: 'Slow, fragile, or half-finished builds inherited and made solid.' },
+];
+
+const steps = [
+	{ n: '01', name: 'Discovery', desc: 'A call and a short written brief. We nail scope, budget, and what "done" means before anything is signed.', time: 'Week 0' },
+	{ n: '02', name: 'Design & plan', desc: 'Wireframes to hi-fi, plus a technical plan you can sanity-check with anyone you trust.', time: 'Weeks 1-2' },
+	{ n: '03', name: 'Build', desc: 'Weekly demos on a live staging URL. You see real progress, not status reports.', time: 'Weeks 2-6' },
+	{ n: '04', name: 'Launch & handoff', desc: 'Deployment, docs, and a recorded walkthrough. We stay on call for the first month, free.', time: 'Launch week' },
+];
+
+const tools = ['TypeScript', 'React', 'Svelte', 'Node.js', 'Next.js', 'PostgreSQL', 'Tailwind', 'Shopify', 'Vercel', 'Cloudflare'];
+
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+
+const faqs = [
+	{ q: 'How do engagements work?', a: 'Fixed-scope projects or ongoing retainers. Either way you work directly with the builders — weekly demo, shared Slack or email thread, no intermediaries.' },
+	{ q: 'What stack do you use?', a: 'Whatever fits — but our defaults are TypeScript, React or Svelte, Node, and edge-first hosting. We inherit legacy stacks happily; rescue work is a specialty.' },
+	{ q: 'How long does a typical project take?', a: 'Marketing sites: 4-6 weeks. Full products: 3-5 months. We scope to the week and have missed two deadlines in eight years.' },
+	{ q: 'How big is the team?', a: 'Small on purpose — a core builder plus a trusted bench of specialists (design, illustration, DevOps) brought in per project. You always get one point of contact and one standard of quality.' },
+	{ q: 'Who owns the code?', a: 'You do, fully, from the first commit. Everything lives in your repos under your accounts.' },
+];
+---
+
+<Layout
+	title="About PilotLab — End-to-End Web Studio, One Point of Contact"
+	description="Web apps, storefronts, and marketing sites designed, engineered, and launched end to end. 8+ years of production code, weekly live demos, one point of contact."
+	schema={[
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'About', path: '/about' },
+		]),
+		faqSchema(faqs),
+	]}
+>
+	<Nav active="about" />
+
+	<section class="hero">
+		<div class="hero-copy">
+			<h1 data-rv>What we<br /><span class="accent">build</span></h1>
+			<p data-rv>
+				From first idea to production: web apps, storefronts, dashboards, and marketing sites —
+				designed, engineered, and launched end to end. If it runs in a browser, we can build it
+				for you.
+			</p>
+			<div data-rv class="hero-stats">
+				<div><div class="hs-big">8+</div><div class="hs-label">Years writing code</div></div>
+				<div><div class="hs-big">Idea → live</div><div class="hs-label">End to end</div></div>
+				<div><div class="hs-big">1</div><div class="hs-label">Point of contact</div></div>
+			</div>
+		</div>
+		<div class="hero-img">
+			<ImageSlot label="Studio portrait" />
+		</div>
+	</section>
+
+	<section class="block">
+		<div class="block-head">
+			<h2 data-rv>Capabilities</h2>
+			<span class="count">(06)</span>
+		</div>
+		<div class="caps">
+			{
+				caps.map((c) => (
+					<div data-rv class="cap">
+						<div class="cell-n">{c.n}</div>
+						<h3>{c.name}</h3>
+						<p>{c.desc}</p>
+					</div>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="block">
+		<div class="block-head">
+			<h2 data-rv>How we'll work</h2>
+			<span class="count">(04)</span>
+		</div>
+		<div class="steps">
+			{
+				steps.map((s) => (
+					<div data-rv class="step">
+						<div class="cell-n">{s.n}</div>
+						<h3>{s.name}</h3>
+						<p>{s.desc}</p>
+						<div class="step-time">{s.time}</div>
+					</div>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="block">
+		<div class="block-head">
+			<h2 data-rv>The toolkit</h2>
+		</div>
+		<div data-rv class="chips">
+			{tools.map((t) => <div class="chip">{t}</div>)}
+		</div>
+	</section>
+
+	<section class="block last">
+		<div class="block-head faq-head">
+			<h2 data-rv>Questions</h2>
+			<span class="count">(05)</span>
+		</div>
+		<div data-acc-group>
+			{
+				faqs.map((f) => (
+					<div data-rv class="acc-item faq">
+						<div class="acc-head">
+							<span class="faq-q">{f.q}</span>
+							<span class="acc-icon">+</span>
+						</div>
+						<div class="acc-body">
+							<p>{f.a}</p>
+						</div>
+					</div>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="cta">
+		<h2 data-rv>Work with us<br /><a href="/contact">Say hello →</a></h2>
+	</section>
+
+	<Footer />
+</Layout>
+
+<style>
+	.hero {
+		display: grid;
+		grid-template-columns: 1.2fr minmax(0, 1fr);
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.hero-copy {
+		padding: 72px 48px;
+	}
+	.hero h1 {
+		font-family: var(--sora);
+		font-size: clamp(48px, 7.5vw, 96px);
+		line-height: 0.98;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	.hero-copy p {
+		font-size: 19px;
+		line-height: 1.65;
+		max-width: 520px;
+		margin-top: 36px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+	.hero-stats {
+		display: flex;
+		gap: 48px;
+		margin-top: 52px;
+	}
+	.hs-big {
+		font-family: var(--sora);
+		font-size: clamp(28px, 3.1vw, 40px);
+		font-weight: 800;
+		color: var(--blue);
+	}
+	.hs-label {
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin-top: 4px;
+	}
+	.hero-img {
+		border-left: 1.5px solid var(--ink);
+		position: relative;
+		min-height: 560px;
+	}
+
+	.block {
+		padding: 72px 48px 88px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.block.last {
+		border-bottom: none;
+	}
+	.block-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 40px;
+	}
+	.faq-head {
+		margin-bottom: 24px;
+	}
+	.block-head h2 {
+		font-family: var(--sora);
+		font-size: clamp(34px, 4.2vw, 54px);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		text-transform: uppercase;
+	}
+	.count {
+		font-size: 13px;
+		color: var(--muted);
+	}
+
+	/* Capabilities 3×2 */
+	.caps {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		border: 1.5px solid var(--ink);
+	}
+	.cap {
+		padding: 36px 30px;
+		border-right: 1.5px solid var(--ink);
+		border-bottom: 1.5px solid var(--ink);
+		transition: all 0.25s;
+		cursor: default;
+	}
+	.cap:nth-child(3n) {
+		border-right: none;
+	}
+	.cap:nth-last-child(-n + 3) {
+		border-bottom: none;
+	}
+	.cap:hover {
+		background: var(--blue);
+		color: #fff;
+	}
+	.cap:hover .cell-n {
+		color: #fff;
+	}
+	.cell-n {
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--blue);
+		margin-bottom: 18px;
+		transition: color 0.25s;
+	}
+	.cap h3,
+	.step h3 {
+		font-family: var(--sora);
+		font-size: 20px;
+		font-weight: 700;
+		margin-bottom: 12px;
+		text-transform: uppercase;
+		letter-spacing: -0.01em;
+	}
+	.cap p,
+	.step p {
+		font-size: 14.5px;
+		line-height: 1.6;
+		opacity: 0.75;
+	}
+
+	/* Process 4-col */
+	.steps {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		border: 1.5px solid var(--ink);
+	}
+	.step {
+		padding: 36px 30px;
+		border-right: 1.5px solid var(--ink);
+		transition: all 0.25s;
+		cursor: default;
+	}
+	.step:last-child {
+		border-right: none;
+	}
+	.step:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+	.step-time {
+		font-size: 12.5px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--blue);
+		margin-top: 18px;
+	}
+
+	/* Toolkit chips */
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.chip {
+		padding: 12px 22px;
+		border: 1.5px solid var(--ink);
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 600;
+		transition: all 0.2s;
+		cursor: default;
+	}
+	.chip:hover {
+		background: var(--blue);
+		border-color: var(--blue);
+		color: #fff;
+	}
+
+	/* FAQ accordion */
+	.faq {
+		border-bottom: 1.5px solid var(--hairline);
+		--acc-max: 220px;
+	}
+	.faq .acc-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 26px 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.faq .acc-head:hover {
+		padding-left: 20px;
+		color: var(--blue);
+	}
+	.faq-q {
+		font-family: var(--sora);
+		font-size: clamp(17px, 1.75vw, 22px);
+		font-weight: 700;
+		letter-spacing: -0.01em;
+	}
+	.faq .acc-icon {
+		font-size: 24px;
+	}
+	.faq .acc-body p {
+		font-size: 16px;
+		line-height: 1.65;
+		color: var(--body);
+		max-width: 720px;
+		padding: 0 8px 28px;
+	}
+
+	/* CTA */
+	.cta {
+		padding: 96px 48px;
+		border-top: 1.5px solid var(--ink);
+		background: var(--blue);
+		color: #fff;
+	}
+	.cta h2 {
+		font-family: var(--sora);
+		font-size: clamp(40px, 6.875vw, 88px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.cta a {
+		color: var(--ink);
+	}
+	.cta a:hover {
+		color: #fff;
+	}
+
+	@media (max-width: 1000px) {
+		.steps {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.step:nth-child(2n) {
+			border-right: none;
+		}
+		.step:nth-child(-n + 2) {
+			border-bottom: 1.5px solid var(--ink);
+		}
+	}
+	@media (max-width: 900px) {
+		.hero {
+			grid-template-columns: 1fr;
+		}
+		.hero-copy,
+		.block,
+		.cta {
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.hero-img {
+			border-left: none;
+			border-top: 1.5px solid var(--ink);
+			min-height: 320px;
+		}
+		.hero-stats {
+			gap: 28px;
+			flex-wrap: wrap;
+		}
+		.caps {
+			grid-template-columns: 1fr;
+		}
+		.cap {
+			border-right: none;
+		}
+		.cap:nth-last-child(-n + 3) {
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.cap:last-child {
+			border-bottom: none;
+		}
+		.steps {
+			grid-template-columns: 1fr;
+		}
+		.step {
+			border-right: none;
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.step:last-child {
+			border-bottom: none;
+		}
+	}
+</style>

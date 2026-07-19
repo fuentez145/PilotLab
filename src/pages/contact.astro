@@ -1,0 +1,440 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { breadcrumbSchema, faqSchema } from '../data/site';
+
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+
+const faqs = [
+	{ q: 'How fast can we start?', a: 'Discovery calls happen within the week. Most projects kick off 2-4 weeks after we agree on scope.' },
+	{ q: 'What does a project cost?', a: 'Marketing sites typically start around €12k; full products from €40k. Every quote is fixed-scope — no surprise invoices.' },
+	{ q: 'Who owns the code?', a: 'You do, fully, from the first commit. Everything lives in your repos under your accounts.' },
+];
+
+const topics = ['Web app', 'E-commerce', 'Design system', 'Something else'];
+---
+
+<Layout
+	title="Start a Project — Replies Within One Business Day | PilotLab"
+	description="Tell us what you're building — web app, storefront, or marketing site. Fixed-scope quotes, clear answers on cost and timing, and a reply within one business day."
+	schema={[
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'Contact', path: '/contact' },
+		]),
+		{
+			'@type': 'ContactPage',
+			name: 'Contact PilotLab',
+			url: `${siteUrl}/contact`,
+		},
+		faqSchema(faqs),
+	]}
+>
+	<Nav active="contact" />
+
+	<div class="wrap">
+		<section class="left">
+			<h1 data-rv>Say<br /><span class="accent">hello</span><span class="pulse"></span></h1>
+			<p data-rv class="intro">
+				Tell us what you're building. We reply within one business day — usually faster.
+			</p>
+			<div data-rv class="details">
+				<div>
+					<div class="label">Email</div>
+					<a href="mailto:hello@pilotlab.dev" class="email">hello@pilotlab.dev</a>
+				</div>
+				<div>
+					<div class="label">Studio</div>
+					<div class="addr">214 Foundry Street, Floor 3<br />Amsterdam, NL</div>
+				</div>
+				<div>
+					<div class="label">Elsewhere</div>
+					<div class="socials">
+						<a href="#">GitHub</a>
+						<a href="#">LinkedIn</a>
+						<a href="#">X</a>
+					</div>
+				</div>
+			</div>
+			<div data-rv class="mini-faq">
+				<div class="label">Before you ask</div>
+				<div data-acc-group>
+					{
+						faqs.map((f) => (
+							<div class="acc-item faq">
+								<div class="acc-head">
+									<span class="faq-q">{f.q}</span>
+									<span class="acc-icon">+</span>
+								</div>
+								<div class="acc-body">
+									<p>{f.a}</p>
+								</div>
+							</div>
+						))
+					}
+				</div>
+				<a href="/about" class="all-q">All questions →</a>
+			</div>
+		</section>
+
+		<section class="right">
+			<div id="contact-done" class="done" hidden>
+				<div class="done-title">Received.</div>
+				<p>Thanks — we'll be in touch within one business day. Talk soon.</p>
+				<button type="button" id="reset-btn" class="again">Send another</button>
+			</div>
+			<form id="contact-form" data-rv novalidate>
+				<div class="field">
+					<label class="label" for="f-name">Your name</label>
+					<input id="f-name" name="name" type="text" placeholder="Jane Appleseed" autocomplete="name" />
+				</div>
+				<div class="field">
+					<label class="label" for="f-email">Work email</label>
+					<input id="f-email" name="email" type="email" placeholder="jane@company.com" autocomplete="email" />
+				</div>
+				<div class="field">
+					<div class="label chips-label">What do you need?</div>
+					<div class="chips">
+						{
+							topics.map((t, i) => (
+								<button type="button" class:list={['chip', { sel: i === 0 }]}>
+									{t}
+								</button>
+							))
+						}
+					</div>
+				</div>
+				<div class="field">
+					<label class="label" for="f-msg">About the project</label>
+					<textarea id="f-msg" name="message" rows="4" placeholder="Timeline, goals, anything useful…"></textarea>
+				</div>
+				<button type="submit" class="send">Send it →</button>
+				<p class="reassure">
+					No brief needed — a few clear sentences is plenty. We'll ask the right questions, and
+					you'll have a fixed-scope quote in writing before anything starts.
+				</p>
+			</form>
+		</section>
+	</div>
+
+	<Footer bordered />
+</Layout>
+
+<script>
+	// Topic chips: single select.
+	const chips = document.querySelectorAll<HTMLButtonElement>('.chip');
+	chips.forEach((chip) => {
+		chip.addEventListener('click', () => {
+			chips.forEach((c) => c.classList.remove('sel'));
+			chip.classList.add('sel');
+		});
+	});
+
+	// Submit swaps to the confirmation state; "Send another" resets the form.
+	const form = document.getElementById('contact-form') as HTMLFormElement;
+	const done = document.getElementById('contact-done') as HTMLElement;
+	form.addEventListener('submit', (e) => {
+		e.preventDefault();
+		form.hidden = true;
+		done.hidden = false;
+	});
+	document.getElementById('reset-btn')?.addEventListener('click', () => {
+		form.reset();
+		chips.forEach((c, i) => c.classList.toggle('sel', i === 0));
+		done.hidden = true;
+		form.hidden = false;
+	});
+</script>
+
+<style>
+	.wrap {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		min-height: calc(100vh - 160px);
+	}
+	.left {
+		padding: 72px 48px;
+		border-right: 1.5px solid var(--ink);
+	}
+	.left h1 {
+		font-family: var(--sora);
+		font-size: clamp(48px, 7.5vw, 96px);
+		line-height: 0.98;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	.pulse {
+		display: inline-block;
+		width: 64px;
+		height: 13px;
+		background: var(--blue);
+		margin-left: 12px;
+		animation: plPulse 2.4s infinite;
+	}
+	.intro {
+		font-size: 18px;
+		line-height: 1.6;
+		max-width: 420px;
+		margin-top: 36px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+
+	.label {
+		display: block;
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin-bottom: 6px;
+	}
+	.details {
+		margin-top: 56px;
+		display: flex;
+		flex-direction: column;
+		gap: 22px;
+	}
+	.email {
+		font-family: var(--sora);
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--blue);
+	}
+	.email:hover {
+		color: var(--ink);
+	}
+	.addr {
+		font-size: 16px;
+		line-height: 1.5;
+	}
+	.socials {
+		display: flex;
+		gap: 18px;
+		font-size: 14px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.socials a {
+		border-bottom: 2px solid var(--blue);
+		padding-bottom: 2px;
+	}
+
+	.mini-faq {
+		margin-top: 64px;
+		border-top: 1.5px solid var(--ink);
+		padding-top: 28px;
+	}
+	.mini-faq .label {
+		margin-bottom: 8px;
+	}
+	.faq {
+		border-bottom: 1.5px solid var(--hairline);
+		--acc-max: 160px;
+	}
+	.faq .acc-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 18px 4px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.faq .acc-head:hover {
+		color: var(--blue);
+	}
+	.faq-q {
+		font-family: var(--sora);
+		font-size: 16.5px;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+	}
+	.faq .acc-icon {
+		font-size: 20px;
+	}
+	.faq .acc-body p {
+		font-size: 14.5px;
+		line-height: 1.65;
+		color: var(--body);
+		padding: 0 4px 20px;
+	}
+	.all-q {
+		display: inline-block;
+		margin-top: 16px;
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		border-bottom: 2px solid var(--blue);
+		padding-bottom: 2px;
+	}
+
+	.right {
+		padding: 72px 48px;
+	}
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+	.field .label {
+		margin-bottom: 10px;
+	}
+	.chips-label {
+		margin-bottom: 12px;
+	}
+	input,
+	textarea {
+		font-family: var(--sans);
+	}
+	input {
+		width: 100%;
+		background: transparent;
+		border: none;
+		border-bottom: 1.5px solid var(--ink);
+		padding: 10px 2px;
+		font-size: 20px;
+		font-family: var(--sora);
+		font-weight: 600;
+		color: var(--ink);
+		outline: none;
+		border-radius: 0;
+	}
+	input:focus {
+		border-bottom-color: var(--blue);
+	}
+	textarea {
+		width: 100%;
+		background: transparent;
+		border: 1.5px solid var(--ink);
+		padding: 14px;
+		font-size: 16px;
+		line-height: 1.5;
+		color: var(--ink);
+		outline: none;
+		resize: vertical;
+		border-radius: 0;
+	}
+	textarea:focus {
+		border-color: var(--blue);
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	.chip {
+		padding: 10px 18px;
+		border: 1.5px solid var(--ink);
+		background: transparent;
+		color: var(--ink);
+		font-family: var(--sans);
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.chip:hover {
+		border-color: var(--blue);
+		color: var(--blue);
+	}
+	.chip.sel {
+		background: var(--ink);
+		color: #fff;
+	}
+	.chip.sel:hover {
+		border-color: var(--ink);
+		color: #fff;
+	}
+	.send {
+		width: max-content;
+		padding: 16px 36px;
+		background: var(--blue);
+		color: #fff;
+		border: none;
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.send:hover {
+		background: var(--ink);
+		transform: translateY(-2px);
+	}
+	.reassure {
+		font-size: 13.5px;
+		line-height: 1.55;
+		color: var(--muted);
+		max-width: 400px;
+		margin-top: -10px;
+	}
+
+	.done {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		gap: 18px;
+	}
+	.done[hidden] {
+		display: none;
+	}
+	.done-title {
+		font-family: var(--sora);
+		font-size: clamp(38px, 4.2vw, 54px);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		text-transform: uppercase;
+		color: var(--blue);
+	}
+	.done p {
+		font-size: 17px;
+		color: var(--body);
+		max-width: 380px;
+	}
+	.again {
+		margin-top: 10px;
+		width: max-content;
+		padding: 12px 24px;
+		border: 1.5px solid var(--ink);
+		background: transparent;
+		color: var(--ink);
+		font-family: var(--sans);
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.again:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+
+	@media (max-width: 900px) {
+		.wrap {
+			grid-template-columns: 1fr;
+		}
+		.left {
+			border-right: none;
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.left,
+		.right {
+			padding: 48px 20px;
+		}
+	}
+</style>

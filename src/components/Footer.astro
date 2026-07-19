@@ -1,0 +1,57 @@
+---
+interface Props {
+	/** Contact page draws its own top rule above the footer. */
+	bordered?: boolean;
+}
+
+const { bordered = false } = Astro.props;
+---
+
+<footer class:list={['footer', { bordered }]}>
+	<span class="flogo">Pilot<span>Lab</span></span>
+	<div class="flinks">
+		<a href="/services">Services</a>
+		<a href="/lab">Lab</a>
+		<a href="/about">About</a>
+		<a href="/contact">Contact</a>
+	</div>
+	<span>© 2026 PilotLab</span>
+</footer>
+
+<style>
+	.footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 26px 48px;
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.footer.bordered {
+		border-top: 1.5px solid var(--ink);
+	}
+	.flogo {
+		font-family: var(--sora);
+		font-weight: 800;
+		font-size: 16px;
+		color: var(--ink);
+	}
+	.flogo span {
+		color: var(--blue);
+	}
+	.flinks {
+		display: flex;
+		gap: 28px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		font-size: 12px;
+	}
+	@media (max-width: 760px) {
+		.footer {
+			padding: 20px;
+			flex-direction: column;
+			gap: 14px;
+		}
+	}
+</style>

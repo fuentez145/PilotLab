@@ -1,0 +1,25 @@
+services:
+  pilotlab:
+    build: .
+    container_name: pilotlab
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      # Router: apex + www
+      - traefik.http.routers.pilotlab.rule=Host(`pilotlab.cloud`) || Host(`www.pilotlab.cloud`)
+      - traefik.http.routers.pilotlab.entrypoints=websecure
+      # ⚠ certresolver must match the name in your traefik.yml (letsencrypt/le/default…)
+      - traefik.http.routers.pilotlab.tls.certresolver=letsencrypt
+      - traefik.http.services.pilotlab.loadbalancer.server.port=80
+      # Redirect www → apex so one canonical host matches the SEO tags
+      - traefik.http.middlewares.pilotlab-www.redirectregex.regex=^https?://www\.pilotlab\.cloud/(.*)
+      - traefik.http.middlewares.pilotlab-www.redirectregex.replacement=https://pilotlab.cloud/$${1}
+      - traefik.http.middlewares.pilotlab-www.redirectregex.permanent=true
+      - traefik.http.routers.pilotlab.middlewares=pilotlab-www
+
+networks:
+  # ⚠ must be the external network your Traefik container watches
+  proxy:
+    external: true

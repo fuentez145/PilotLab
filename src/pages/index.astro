@@ -1,11 +1,635 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import { organizationSchema, SITE } from '../data/site';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import ImageSlot from '../components/ImageSlot.astro';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+
+const services = [
+	{ n: '01', name: 'Web applications', desc: 'Complex products shipped with obsessive attention to detail.' },
+	{ n: '02', name: 'Design systems', desc: 'Component libraries your team will love to build with.' },
+	{ n: '03', name: 'E-commerce', desc: 'Storefronts engineered to convert, measured to prove it.' },
+	{ n: '04', name: 'Performance & audits', desc: 'We find the milliseconds everyone else leaves behind.' },
+];
+
+const marquee = ['Web applications', 'Design systems', 'E-commerce', 'Performance'];
+
+const labCards = [
+	{
+		href: '/lab/freightboard',
+		ph: 'Freightboard — dispatch dashboard demo',
+		name: 'Freightboard',
+		tag: 'Web app concept',
+		desc: 'A dispatch dashboard concept — dense data, keyboard-first, instant.',
+	},
+	{
+		href: '/lab/glasshouse',
+		ph: 'Glasshouse — storefront demo',
+		name: 'Glasshouse Store',
+		tag: 'E-commerce demo',
+		desc: 'A headless storefront concept — editorial storytelling, instant checkout.',
+	},
+];
+
+const promises = [
+	{
+		n: '01',
+		name: 'Weekly demos, live',
+		desc: 'Real progress on a staging URL every week — never a status report.',
+	},
+	{
+		n: '02',
+		name: 'You own everything',
+		desc: 'Your repos, your accounts, full documentation — from the first commit.',
+	},
+	{
+		n: '03',
+		name: 'A month on call, free',
+		desc: 'After launch we stay available for fixes and tuning — no invoice.',
+	},
+];
 ---
 
-<Layout>
-	<Welcome />
+<Layout
+	title="PilotLab — Web Development Studio | Web, Built Right"
+	description="PilotLab designs and builds web apps, storefronts, and marketing sites — fixed scope, weekly live demos, and code you own from the first commit."
+	schema={[
+		organizationSchema(siteUrl),
+		{
+			'@type': 'WebSite',
+			'@id': `${siteUrl}/#website`,
+			url: siteUrl,
+			name: SITE.name,
+			description: SITE.description,
+			publisher: { '@id': `${siteUrl}/#organization` },
+		},
+	]}
+>
+	<Nav />
+
+	<section class="hero">
+		<h1 data-rv>Web,<br />built <span class="accent">right</span><span class="pulse"></span></h1>
+		<div class="hero-row">
+			<p data-rv>
+				PilotLab is a web development studio for teams who measure twice and ship fast. Products,
+				platforms, and storefronts — engineered without compromise.
+			</p>
+			<a data-rv href="/lab" class="see-work"><span class="circle">→</span>See the work</a>
+		</div>
+	</section>
+
+	<div class="marquee" aria-hidden="true">
+		<div class="marquee-track">
+			{[0, 1].map(() => marquee.map((m) => <><span>{m}</span><span>◆</span></>))}
+		</div>
+	</div>
+
+	<section class="services">
+		<div class="sec-head">
+			<h2 data-rv class="kicker">Services</h2>
+			<span class="count">(04)</span>
+		</div>
+		{
+			services.map((s) => (
+				<div data-rv class="svc">
+					<div class="svc-name">
+						<span class="svc-n">{s.n}</span>
+						<span class="svc-title">{s.name}</span>
+					</div>
+					<div class="svc-right">
+						<span class="svc-desc">{s.desc}</span>
+						<span class="svc-arrow">→</span>
+					</div>
+				</div>
+			))
+		}
+	</section>
+
+	<section class="lab-preview">
+		<div class="lab-head">
+			<h2 data-rv>From the lab</h2>
+			<a href="/lab" class="all-link">All experiments →</a>
+		</div>
+		<div class="lab-grid">
+			{
+				labCards.map((c) => (
+					<a href={c.href} data-rv class="card">
+						<div class="card-img">
+							<ImageSlot label={c.ph} />
+						</div>
+						<div class="card-row">
+							<span class="card-name">{c.name}</span>
+							<span class="card-tag">{c.tag}</span>
+						</div>
+						<p class="card-desc">{c.desc}</p>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="dark-band">
+		<div class="stats">
+			<div data-rv>
+				<div class="stat-num" data-count="8" data-suffix="+">8+</div>
+				<div class="stat-label">Years writing production code</div>
+			</div>
+			<div data-rv>
+				<div class="stat-num" data-count="100" data-suffix="">100</div>
+				<div class="stat-label">Lighthouse score, every demo</div>
+			</div>
+			<div data-rv>
+				<div class="stat-num" data-count="6" data-suffix="">6</div>
+				<div class="stat-label">Live experiments in the lab</div>
+			</div>
+		</div>
+		<div class="promises">
+			<div data-rv class="promises-kicker">What you can count on</div>
+			<div class="promise-grid">
+				{
+					promises.map((p) => (
+						<div data-rv class="promise">
+							<div class="promise-n">{p.n}</div>
+							<div class="promise-name">{p.name}</div>
+							<p class="promise-desc">{p.desc}</p>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</section>
+
+	<section class="offer">
+		<div class="offer-grid">
+			<div>
+				<div data-rv class="offer-kicker">Founding client offer</div>
+				<h2 data-rv>Be one of the first three clients</h2>
+				<p data-rv>
+					PilotLab is new — and that's your advantage. The first three projects get launch pricing,
+					my undivided attention, and priority support for a full year. Same craft as the lab
+					demos, on your product.
+				</p>
+			</div>
+			<div data-rv class="offer-stats">
+				<div class="offer-stat"><span class="big">−25%</span><span class="small">launch pricing on your first project</span></div>
+				<div class="offer-stat"><span class="big">12 mo</span><span class="small">priority support after launch</span></div>
+				<a href="/contact" class="claim">Claim a slot →</a>
+			</div>
+		</div>
+	</section>
+
+	<section class="cta">
+		<h2 data-rv>Have a project?<br /><a href="/contact">Let's talk →</a></h2>
+	</section>
+
+	<Footer />
 </Layout>
+
+<script>
+	// Count-up stats: 0 → target over 1.4s ease-out cubic when ≥50% visible.
+	if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		const cio = new IntersectionObserver(
+			(entries) => {
+				entries.forEach((e) => {
+					if (!e.isIntersecting) return;
+					cio.unobserve(e.target);
+					const el = e.target as HTMLElement;
+					const target = +(el.dataset.count ?? 0);
+					const suffix = el.dataset.suffix || '';
+					const t0 = performance.now();
+					const dur = 1400;
+					const tick = (t: number) => {
+						const p = Math.min((t - t0) / dur, 1);
+						const ease = 1 - Math.pow(1 - p, 3);
+						el.textContent = Math.round(target * ease) + suffix;
+						if (p < 1) requestAnimationFrame(tick);
+					};
+					requestAnimationFrame(tick);
+				});
+			},
+			{ threshold: 0.5 },
+		);
+		document.querySelectorAll('[data-count]').forEach((el) => cio.observe(el));
+	}
+</script>
+
+<style>
+	/* Hero */
+	.hero {
+		padding: 64px 48px;
+	}
+	.hero h1 {
+		font-family: var(--sora);
+		font-size: clamp(52px, 8.75vw, 112px);
+		line-height: 0.98;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	.pulse {
+		display: inline-block;
+		width: 80px;
+		height: 15px;
+		background: var(--blue);
+		margin-left: 14px;
+		animation: plPulse 2.4s infinite;
+	}
+	.hero-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		margin-top: 48px;
+		gap: 40px;
+	}
+	.hero-row p {
+		font-size: 19px;
+		line-height: 1.6;
+		max-width: 470px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+	.see-work {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		font-weight: 700;
+		font-size: 15px;
+		white-space: nowrap;
+	}
+	.circle {
+		width: 54px;
+		height: 54px;
+		border-radius: 50%;
+		background: var(--blue);
+		color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+	}
+
+	/* Marquee */
+	.marquee {
+		border-top: 1.5px solid var(--ink);
+		border-bottom: 1.5px solid var(--ink);
+		padding: 18px 0;
+		overflow: hidden;
+		background: var(--blue);
+	}
+	.marquee-track {
+		display: flex;
+		gap: 56px;
+		width: max-content;
+		animation: plMarquee 22s linear infinite;
+		font-family: var(--sora);
+		font-weight: 700;
+		font-size: 16px;
+		color: #fff;
+		white-space: nowrap;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+
+	/* Services */
+	.services {
+		padding: 72px 48px 88px;
+	}
+	.sec-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 8px;
+	}
+	.kicker {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--blue);
+	}
+	.count {
+		font-size: 13px;
+		color: var(--muted);
+	}
+	.svc {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 30px 8px;
+		border-bottom: 1.5px solid var(--hairline);
+		cursor: pointer;
+		transition: all 0.25s;
+	}
+	.svc:hover {
+		background: var(--ink);
+		color: #fff;
+		padding-left: 24px;
+		padding-right: 24px;
+	}
+	.svc-name {
+		display: flex;
+		align-items: baseline;
+		gap: 28px;
+	}
+	.svc-n {
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--blue);
+	}
+	.svc-title {
+		font-family: var(--sora);
+		font-size: clamp(22px, 2.7vw, 34px);
+		font-weight: 700;
+		letter-spacing: -0.02em;
+	}
+	.svc-right {
+		display: flex;
+		align-items: center;
+		gap: 40px;
+	}
+	.svc-desc {
+		font-size: 14.5px;
+		color: inherit;
+		opacity: 0.6;
+		max-width: 380px;
+	}
+	.svc-arrow {
+		font-size: 22px;
+	}
+
+	/* From the lab */
+	.lab-preview {
+		padding: 0 48px 88px;
+	}
+	.lab-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		border-top: 1.5px solid var(--ink);
+		padding-top: 28px;
+		margin-bottom: 36px;
+	}
+	.lab-head h2 {
+		font-family: var(--sora);
+		font-size: clamp(34px, 4.2vw, 54px);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		text-transform: uppercase;
+	}
+	.all-link {
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		border-bottom: 2px solid var(--blue);
+		padding-bottom: 3px;
+	}
+	.lab-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 28px;
+	}
+	.card {
+		display: block;
+		color: inherit;
+		transition: transform 0.3s;
+	}
+	.card:hover {
+		transform: translateY(-6px);
+		color: inherit;
+	}
+	.card-img {
+		position: relative;
+		height: 420px;
+		border: 1.5px solid var(--ink);
+		overflow: hidden;
+	}
+	.card-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		padding: 16px 4px 0;
+	}
+	.card-name {
+		font-family: var(--sora);
+		font-size: 22px;
+		font-weight: 700;
+	}
+	.card-tag {
+		font-size: 13px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--blue);
+	}
+	.card-desc {
+		font-size: 14.5px;
+		color: var(--body);
+		margin: 6px 4px 0;
+	}
+
+	/* Dark band */
+	.dark-band {
+		background: var(--ink);
+		color: #fff;
+		padding: 88px 48px;
+	}
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 40px;
+		text-align: center;
+	}
+	.stat-num {
+		font-family: var(--sora);
+		font-size: clamp(40px, 5vw, 64px);
+		font-weight: 800;
+		color: var(--blue-lt);
+	}
+	.stat-label {
+		font-size: 14px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted-dark);
+		margin-top: 8px;
+	}
+	.promises {
+		max-width: 1080px;
+		margin: 96px auto 0;
+	}
+	.promises-kicker {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--blue-lt);
+		margin-bottom: 34px;
+		text-align: center;
+	}
+	.promise-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 26px;
+	}
+	.promise {
+		border: 1px solid var(--hairline-dark);
+		padding: 32px 28px;
+		transition: all 0.25s;
+	}
+	.promise:hover {
+		border-color: var(--blue-lt);
+		background: rgba(91, 140, 255, 0.06);
+	}
+	.promise-n {
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--blue-lt);
+		margin-bottom: 16px;
+	}
+	.promise-name {
+		font-family: var(--sora);
+		font-size: 19px;
+		font-weight: 700;
+		margin-bottom: 10px;
+	}
+	.promise-desc {
+		font-size: 14.5px;
+		line-height: 1.6;
+		color: var(--muted-dark);
+	}
+
+	/* Founding client offer */
+	.offer {
+		padding: 80px 48px;
+		background: var(--blue);
+		color: #fff;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.offer-grid {
+		display: grid;
+		grid-template-columns: 1.2fr minmax(0, 1fr);
+		gap: 48px;
+		align-items: center;
+	}
+	.offer-kicker {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		margin-bottom: 20px;
+		opacity: 0.8;
+	}
+	.offer h2 {
+		font-family: var(--sora);
+		font-size: clamp(32px, 4vw, 52px);
+		line-height: 1.05;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		text-transform: uppercase;
+	}
+	.offer p {
+		font-size: 17px;
+		line-height: 1.65;
+		max-width: 520px;
+		margin-top: 22px;
+		opacity: 0.9;
+		text-wrap: pretty;
+	}
+	.offer-stats {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.offer-stat {
+		display: flex;
+		align-items: baseline;
+		gap: 14px;
+		border-bottom: 1.5px solid rgba(255, 255, 255, 0.3);
+		padding-bottom: 14px;
+	}
+	.offer-stat .big {
+		font-family: var(--sora);
+		font-weight: 800;
+		font-size: 18px;
+	}
+	.offer-stat .small {
+		font-size: 15px;
+		opacity: 0.85;
+	}
+	.claim {
+		margin-top: 10px;
+		width: max-content;
+		padding: 15px 30px;
+		background: var(--ink);
+		color: #fff;
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: all 0.2s;
+	}
+	.claim:hover {
+		background: #fff;
+		color: var(--ink);
+	}
+
+	/* CTA */
+	.cta {
+		padding: 96px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.cta h2 {
+		font-family: var(--sora);
+		font-size: clamp(40px, 6.875vw, 88px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.cta a {
+		color: var(--blue);
+	}
+	.cta a:hover {
+		color: var(--ink);
+	}
+
+	@media (max-width: 900px) {
+		.hero,
+		.services,
+		.lab-preview,
+		.dark-band,
+		.offer,
+		.cta {
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.hero-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 28px;
+		}
+		.svc-desc {
+			display: none;
+		}
+		.lab-grid,
+		.stats,
+		.promise-grid,
+		.offer-grid {
+			grid-template-columns: 1fr;
+		}
+		.card-img {
+			height: 300px;
+		}
+	}
+</style>

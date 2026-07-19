@@ -1,0 +1,40 @@
+---
+/**
+ * Placeholder for user-supplied imagery (handoff `<image-slot>` elements).
+ * Fills its positioned parent; swap for a real <img> when assets exist.
+ */
+interface Props {
+	label: string;
+}
+
+const { label } = Astro.props;
+---
+
+<div class="slot" role="img" aria-label={label}>
+	<span>{label}</span>
+</div>
+
+<style>
+	.slot {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background:
+			repeating-linear-gradient(45deg, rgba(14, 28, 51, 0.05) 0 1.5px, transparent 1.5px 14px),
+			#e3e8f0;
+	}
+	.slot span {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		padding: 8px 14px;
+		border: 1.5px solid var(--hairline);
+		background: rgba(238, 241, 246, 0.7);
+		text-align: center;
+		max-width: 80%;
+	}
+</style>

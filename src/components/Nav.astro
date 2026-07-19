@@ -1,0 +1,78 @@
+---
+interface Props {
+	active?: 'services' | 'lab' | 'about' | 'contact';
+}
+
+const { active } = Astro.props;
+---
+
+<header class="nav">
+	<a class="logo" href="/">Pilot<span>Lab</span></a>
+	<nav class="links">
+		<a href="/services" class:list={{ active: active === 'services' }}>Services</a>
+		<a href="/lab" class:list={{ active: active === 'lab' }}>Lab</a>
+		<a href="/about" class:list={{ active: active === 'about' }}>About</a>
+		<a href="/contact" class:list={{ active: active === 'contact' }}>Contact</a>
+	</nav>
+	<a class="start" href="/contact">Start a project</a>
+</header>
+
+<style>
+	.nav {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 24px 48px;
+		border-bottom: 1.5px solid var(--ink);
+		position: sticky;
+		top: 0;
+		background: rgba(238, 241, 246, 0.92);
+		backdrop-filter: blur(10px);
+		z-index: 50;
+	}
+	.logo {
+		font-family: var(--sora);
+		font-weight: 800;
+		font-size: 20px;
+	}
+	.logo span {
+		color: var(--blue);
+	}
+	.links {
+		display: flex;
+		gap: 34px;
+		font-size: 14px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.links a.active {
+		color: var(--blue);
+		border-bottom: 2px solid var(--blue);
+		padding-bottom: 2px;
+	}
+	.start {
+		padding: 10px 20px;
+		border: 1.5px solid var(--ink);
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: all 0.2s;
+	}
+	.start:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+	@media (max-width: 760px) {
+		.nav {
+			padding: 16px 20px;
+		}
+		.links {
+			gap: 18px;
+		}
+		.start {
+			display: none;
+		}
+	}
+</style>

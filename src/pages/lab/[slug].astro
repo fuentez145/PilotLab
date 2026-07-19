@@ -1,0 +1,300 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import ImageSlot from '../../components/ImageSlot.astro';
+import { projects } from '../../data/projects';
+import { breadcrumbSchema } from '../../data/site';
+
+export function getStaticPaths() {
+	return projects.map((p) => ({ params: { slug: p.slug } }));
+}
+
+const { slug } = Astro.params;
+const idx = projects.findIndex((p) => p.slug === slug);
+const p = projects[idx];
+const next = projects[(idx + 1) % projects.length];
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+---
+
+<Layout
+	title={`${p.name} Case Study — ${p.tag} | PilotLab`}
+	description={p.summary}
+	ogType="article"
+	schema={[
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'The Lab', path: '/lab' },
+			{ name: p.name, path: `/lab/${p.slug}` },
+		]),
+		{
+			'@type': 'CreativeWork',
+			name: p.name,
+			headline: p.summary,
+			about: p.tag,
+			dateCreated: p.year,
+			url: `${siteUrl}/lab/${p.slug}`,
+			creator: { '@type': 'Organization', name: 'PilotLab', url: siteUrl },
+		},
+	]}
+>
+	<Nav active="lab" />
+
+	<section class="hero">
+		<a href="/lab" class="back">← Back to lab</a>
+		<div class="hero-row">
+			<h1 data-rv>{p.name}</h1>
+			<span class="tag">{p.tag}</span>
+		</div>
+		<p data-rv class="summary">{p.summary}</p>
+	</section>
+
+	<section class="meta">
+		<div class="meta-cell"><div class="meta-label">Client</div><div class="meta-value">{p.client}</div></div>
+		<div class="meta-cell"><div class="meta-label">Year</div><div class="meta-value">{p.year}</div></div>
+		<div class="meta-cell"><div class="meta-label">Scope</div><div class="meta-value">{p.scope}</div></div>
+		<div class="meta-cell"><div class="meta-label">Stack</div><div class="meta-value">{p.stack}</div></div>
+	</section>
+
+	<div class="case-hero">
+		<ImageSlot label={`Hero image — ${p.name}`} />
+	</div>
+
+	<section class="split">
+		<div data-rv class="split-cell">
+			<h2 class="kicker">The idea</h2>
+			<p>{p.challenge}</p>
+		</div>
+		<div data-rv class="split-cell">
+			<h2 class="kicker">The approach</h2>
+			<p>{p.approach}</p>
+		</div>
+	</section>
+
+	<section class="results">
+		<h2 data-rv class="kicker">What it proves</h2>
+		<div class="results-grid">
+			{
+				p.results.map((r) => (
+					<div data-rv>
+						<div class="result-big">{r.big}</div>
+						<div class="result-small">{r.small}</div>
+					</div>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="next">
+		<div class="next-kicker">Next experiment</div>
+		<h2 data-rv><a href={`/lab/${next.slug}`}>{next.name} →</a></h2>
+	</section>
+
+	<Footer />
+</Layout>
+
+<style>
+	.hero {
+		padding: 64px 48px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.back {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.back:hover {
+		color: var(--blue);
+	}
+	.hero-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		gap: 40px;
+		margin-top: 26px;
+	}
+	.hero h1 {
+		font-family: var(--sora);
+		font-size: clamp(44px, 6.875vw, 88px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.tag {
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--blue);
+		white-space: nowrap;
+		padding-bottom: 12px;
+	}
+	.summary {
+		font-size: 19px;
+		line-height: 1.6;
+		max-width: 620px;
+		margin-top: 28px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+
+	.meta {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.meta-cell {
+		padding: 26px 32px;
+		border-right: 1.5px solid var(--ink);
+	}
+	.meta-cell:last-child {
+		border-right: none;
+	}
+	.meta-label {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin-bottom: 6px;
+	}
+	.meta-value {
+		font-family: var(--sora);
+		font-size: 16px;
+		font-weight: 700;
+	}
+
+	.case-hero {
+		position: relative;
+		height: 560px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+
+	.split {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.split-cell {
+		padding: 64px 48px;
+	}
+	.split-cell:first-child {
+		border-right: 1.5px solid var(--ink);
+	}
+	.kicker {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--blue);
+		margin-bottom: 22px;
+	}
+	.split-cell p {
+		font-size: 17px;
+		line-height: 1.7;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+
+	.results {
+		background: var(--ink);
+		color: #fff;
+		padding: 72px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.results .kicker {
+		color: var(--blue-lt);
+		margin-bottom: 40px;
+	}
+	.results-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 40px;
+	}
+	.result-big {
+		font-family: var(--sora);
+		font-size: clamp(36px, 4.4vw, 56px);
+		font-weight: 800;
+		color: var(--blue-lt);
+	}
+	.result-small {
+		font-size: 14.5px;
+		line-height: 1.5;
+		color: var(--muted-dark);
+		margin-top: 8px;
+	}
+
+	.next {
+		padding: 80px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.next-kicker {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin-bottom: 14px;
+	}
+	.next h2 {
+		font-family: var(--sora);
+		font-size: clamp(36px, 5.625vw, 72px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.next a {
+		color: var(--blue);
+	}
+	.next a:hover {
+		color: var(--ink);
+	}
+
+	@media (max-width: 900px) {
+		.hero,
+		.split-cell,
+		.results,
+		.next {
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.hero-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 12px;
+		}
+		.tag {
+			padding-bottom: 0;
+		}
+		.meta {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.meta-cell {
+			padding: 20px;
+		}
+		.meta-cell:nth-child(2n) {
+			border-right: none;
+		}
+		.meta-cell:nth-child(-n + 2) {
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.case-hero {
+			height: 320px;
+		}
+		.split {
+			grid-template-columns: 1fr;
+		}
+		.split-cell:first-child {
+			border-right: none;
+			border-bottom: 1.5px solid var(--ink);
+		}
+		.results-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

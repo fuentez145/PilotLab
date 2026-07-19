@@ -1,0 +1,185 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import ImageSlot from '../../components/ImageSlot.astro';
+import { projects } from '../../data/projects';
+import { breadcrumbSchema } from '../../data/site';
+
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+---
+
+<Layout
+	title="The Lab — Live Demos, Experiments & Case Studies | PilotLab"
+	description="Six self-initiated builds you can click through today — dashboards, storefronts, design systems, and performance teardowns. See how PilotLab works before you hire."
+	schema={[
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'The Lab', path: '/lab' },
+		]),
+		{
+			'@type': 'ItemList',
+			name: 'PilotLab experiments',
+			itemListElement: projects.map((p, i) => ({
+				'@type': 'ListItem',
+				position: i + 1,
+				name: p.name,
+				url: `${siteUrl}/lab/${p.slug}`,
+			})),
+		},
+	]}
+>
+	<Nav active="lab" />
+
+	<section class="hero">
+		<h1 data-rv>The <span class="accent">lab</span></h1>
+		<p data-rv>
+			Self-initiated builds — concepts, demos, and experiments made to show how I work. Everything
+			here is live: click in, poke around, view source.
+		</p>
+	</section>
+
+	<section class="grid-wrap">
+		<div class="grid">
+			{
+				projects.map((p) => (
+					<a href={`/lab/${p.slug}`} data-rv class="card">
+						<div class="card-img">
+							<ImageSlot label={p.ph} />
+						</div>
+						<div class="card-row">
+							<span class="card-name">{p.name}</span>
+							<span class="card-tag">{p.tag}</span>
+						</div>
+						<p class="card-desc">{p.desc}</p>
+						<div class="card-link">Read case study →</div>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="cta">
+		<h2 data-rv>Your project gets<br /><a href="/contact">this care →</a></h2>
+	</section>
+
+	<Footer />
+</Layout>
+
+<style>
+	.hero {
+		padding: 72px 48px 48px;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.hero h1 {
+		font-family: var(--sora);
+		font-size: clamp(50px, 8.125vw, 104px);
+		line-height: 0.98;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	.hero p {
+		font-size: 18px;
+		line-height: 1.6;
+		max-width: 520px;
+		margin-top: 32px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+
+	.grid-wrap {
+		padding: 56px 48px 88px;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 32px 28px;
+	}
+	.card {
+		display: block;
+		color: inherit;
+		transition: transform 0.3s;
+	}
+	.card:hover {
+		transform: translateY(-6px);
+		color: inherit;
+	}
+	.card-img {
+		position: relative;
+		height: 380px;
+		border: 1.5px solid var(--ink);
+		overflow: hidden;
+	}
+	.card-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		padding: 16px 4px 0;
+	}
+	.card-name {
+		font-family: var(--sora);
+		font-size: 22px;
+		font-weight: 700;
+	}
+	.card-tag {
+		font-size: 13px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--blue);
+	}
+	.card-desc {
+		font-size: 14.5px;
+		color: var(--body);
+		margin: 6px 4px 0;
+	}
+	.card-link {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--blue);
+		margin: 12px 4px 0;
+	}
+
+	.cta {
+		padding: 96px 48px;
+		border-top: 1.5px solid var(--ink);
+		border-bottom: 1.5px solid var(--ink);
+		background: var(--ink);
+		color: #fff;
+	}
+	.cta h2 {
+		font-family: var(--sora);
+		font-size: clamp(40px, 6.875vw, 88px);
+		line-height: 1;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+	}
+	.cta a {
+		color: var(--blue-lt);
+	}
+	.cta a:hover {
+		color: #fff;
+	}
+
+	@media (max-width: 900px) {
+		.hero,
+		.grid-wrap,
+		.cta {
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.grid {
+			grid-template-columns: 1fr;
+		}
+		.card-img {
+			height: 300px;
+		}
+	}
+</style>

@@ -4,6 +4,7 @@ import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import ImageSlot from '../components/ImageSlot.astro';
 import { breadcrumbSchema, faqSchema } from '../data/site';
+import studioImg from '../assets/work/studio.png';
 
 const caps = [
 	{ n: '01', name: 'Web applications', desc: 'Dashboards, SaaS products, internal tools — complex UIs that stay fast at scale.' },
@@ -62,7 +63,7 @@ const faqs = [
 			</div>
 		</div>
 		<div class="hero-img">
-			<ImageSlot label="Studio portrait" />
+			<ImageSlot label="PilotLab studio — geometric brand artwork, Amsterdam" src={studioImg} />
 		</div>
 	</section>
 

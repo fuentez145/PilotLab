@@ -1,20 +1,46 @@
 ---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
 /**
- * Placeholder for user-supplied imagery (handoff `<image-slot>` elements).
- * Fills its positioned parent; swap for a real <img> when assets exist.
+ * Fills its positioned parent with imagery. With `src` it renders an
+ * optimized image (label becomes the alt text); without, the handoff-style
+ * crosshatch placeholder.
  */
 interface Props {
 	label: string;
+	src?: ImageMetadata;
 }
 
-const { label } = Astro.props;
+const { label, src } = Astro.props;
 ---
 
-<div class="slot" role="img" aria-label={label}>
-	<span>{label}</span>
-</div>
+{
+	src ? (
+		<Image
+			class="img"
+			src={src}
+			alt={label}
+			widths={[640, 1024, 1440, 1920]}
+			sizes="(max-width: 900px) 100vw, 60vw"
+		/>
+	) : (
+		<div class="slot" role="img" aria-label={label}>
+			<span>{label}</span>
+		</div>
+	)
+}
 
 <style>
+	.img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		/* mockups are content-heavy at the top — crop from the bottom */
+		object-position: center top;
+	}
 	.slot {
 		position: absolute;
 		inset: 0;

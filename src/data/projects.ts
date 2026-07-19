@@ -1,3 +1,11 @@
+import type { ImageMetadata } from 'astro';
+import freightboardImg from '../assets/work/freightboard.png';
+import glasshouseImg from '../assets/work/glasshouse.png';
+import meridianImg from '../assets/work/meridian.png';
+import fieldnotesImg from '../assets/work/fieldnotes.png';
+import wayfareImg from '../assets/work/wayfare.png';
+import benchpressImg from '../assets/work/benchpress.png';
+
 export interface CaseResult {
 	big: string;
 	small: string;
@@ -7,8 +15,9 @@ export interface Project {
 	slug: string;
 	name: string;
 	tag: string;
-	/** Image-slot placeholder label */
+	/** Image alt text (was the placeholder label) */
 	ph: string;
+	image: ImageMetadata;
 	/** Card description on the Lab grid */
 	desc: string;
 	client: string;
@@ -24,6 +33,7 @@ export interface Project {
 export const projects: Project[] = [
 	{
 		slug: 'freightboard',
+		image: freightboardImg,
 		name: 'Freightboard',
 		tag: 'Web app concept',
 		ph: 'Freightboard — dispatch dashboard demo',
@@ -46,6 +56,7 @@ export const projects: Project[] = [
 	},
 	{
 		slug: 'glasshouse',
+		image: glasshouseImg,
 		name: 'Glasshouse Store',
 		tag: 'E-commerce demo',
 		ph: 'Glasshouse — storefront demo product page',
@@ -68,6 +79,7 @@ export const projects: Project[] = [
 	},
 	{
 		slug: 'meridian',
+		image: meridianImg,
 		name: 'Meridian UI',
 		tag: 'Design system',
 		ph: 'Meridian UI — component library',
@@ -90,6 +102,7 @@ export const projects: Project[] = [
 	},
 	{
 		slug: 'fieldnotes',
+		image: fieldnotesImg,
 		name: 'Fieldnotes',
 		tag: 'Marketing site',
 		ph: 'Fieldnotes — editorial site layout',
@@ -111,6 +124,7 @@ export const projects: Project[] = [
 	},
 	{
 		slug: 'wayfare',
+		image: wayfareImg,
 		name: 'Wayfare',
 		tag: 'Web app concept',
 		ph: 'Wayfare — booking flow demo',
@@ -132,6 +146,7 @@ export const projects: Project[] = [
 	},
 	{
 		slug: 'benchpress',
+		image: benchpressImg,
 		name: 'Benchpress',
 		tag: 'Performance study',
 		ph: 'Benchpress — performance report view',

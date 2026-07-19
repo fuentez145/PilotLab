@@ -45,7 +45,7 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 				projects.map((p) => (
 					<a href={`/lab/${p.slug}`} data-rv class="card">
 						<div class="card-img">
-							<ImageSlot label={p.ph} />
+							<ImageSlot label={p.ph} src={p.image} />
 						</div>
 						<div class="card-row">
 							<span class="card-name">{p.name}</span>

@@ -4,6 +4,7 @@ import { organizationSchema, SITE } from '../data/site';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import ImageSlot from '../components/ImageSlot.astro';
+import { projects } from '../data/projects';
 
 const siteUrl = Astro.site!.href.replace(/\/$/, '');
 
@@ -20,6 +21,7 @@ const labCards = [
 	{
 		href: '/lab/freightboard',
 		ph: 'Freightboard — dispatch dashboard demo',
+		image: projects.find((p) => p.slug === 'freightboard')!.image,
 		name: 'Freightboard',
 		tag: 'Web app concept',
 		desc: 'A dispatch dashboard concept — dense data, keyboard-first, instant.',
@@ -27,6 +29,7 @@ const labCards = [
 	{
 		href: '/lab/glasshouse',
 		ph: 'Glasshouse — storefront demo',
+		image: projects.find((p) => p.slug === 'glasshouse')!.image,
 		name: 'Glasshouse Store',
 		tag: 'E-commerce demo',
 		desc: 'A headless storefront concept — editorial storytelling, instant checkout.',
@@ -117,7 +120,7 @@ const promises = [
 				labCards.map((c) => (
 					<a href={c.href} data-rv class="card">
 						<div class="card-img">
-							<ImageSlot label={c.ph} />
+							<ImageSlot label={c.ph} src={c.image} />
 						</div>
 						<div class="card-row">
 							<span class="card-name">{c.name}</span>

@@ -57,7 +57,7 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	</section>
 
 	<div class="case-hero">
-		<ImageSlot label={`Hero image — ${p.name}`} />
+		<ImageSlot label={p.ph} src={p.image} />
 	</div>
 
 	<section class="split">

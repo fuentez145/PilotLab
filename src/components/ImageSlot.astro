@@ -10,9 +10,11 @@ import type { ImageMetadata } from 'astro';
 interface Props {
 	label: string;
 	src?: ImageMetadata;
+	/** Above-the-fold images (case-study heroes) should not lazy-load. */
+	eager?: boolean;
 }
 
-const { label, src } = Astro.props;
+const { label, src, eager = false } = Astro.props;
 ---
 
 {
@@ -23,6 +25,8 @@ const { label, src } = Astro.props;
 			alt={label}
 			widths={[640, 1024, 1440, 1920]}
 			sizes="(max-width: 900px) 100vw, 60vw"
+			loading={eager ? 'eager' : 'lazy'}
+			fetchpriority={eager ? 'high' : 'auto'}
 		/>
 	) : (
 		<div class="slot" role="img" aria-label={label}>

@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import ImageSlot from '../../components/ImageSlot.astro';
+import { getImage } from 'astro:assets';
 import { projects } from '../../data/projects';
 import { breadcrumbSchema } from '../../data/site';
 
@@ -15,12 +16,17 @@ const idx = projects.findIndex((p) => p.slug === slug);
 const p = projects[idx];
 const next = projects[(idx + 1) % projects.length];
 const siteUrl = Astro.site!.href.replace(/\/$/, '');
+
+// Social cards show the project's own product shot instead of the generic brand card.
+const ogShot = await getImage({ src: p.image, width: 1200, format: 'png' });
 ---
 
 <Layout
 	title={`${p.name} Case Study — ${p.tag} | PilotLab`}
 	description={p.summary}
 	ogType="article"
+	ogImage={ogShot.src}
+	ogImageAlt={p.ph}
 	schema={[
 		breadcrumbSchema(siteUrl, [
 			{ name: 'Home', path: '/' },
@@ -57,7 +63,7 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	</section>
 
 	<div class="case-hero">
-		<ImageSlot label={p.ph} src={p.image} />
+		<ImageSlot label={p.ph} src={p.image} eager />
 	</div>
 
 	<section class="split">
@@ -88,6 +94,10 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	<section class="next">
 		<div class="next-kicker">Next experiment</div>
 		<h2 data-rv><a href={`/lab/${next.slug}`}>{next.name} →</a></h2>
+		<p class="next-cta">
+			Or skip the tour — <a href="/contact">tell us about your project</a> and get this level of
+			care on something real.
+		</p>
 	</section>
 
 	<Footer />
@@ -248,10 +258,24 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 		letter-spacing: -0.04em;
 		text-transform: uppercase;
 	}
-	.next a {
+	.next h2 a {
 		color: var(--blue);
 	}
-	.next a:hover {
+	.next h2 a:hover {
+		color: var(--ink);
+	}
+	.next-cta {
+		font-size: 15px;
+		color: var(--body);
+		margin-top: 24px;
+	}
+	.next-cta a {
+		font-weight: 700;
+		color: var(--blue);
+		border-bottom: 2px solid var(--blue);
+		padding-bottom: 2px;
+	}
+	.next-cta a:hover {
 		color: var(--ink);
 	}
 

@@ -1,0 +1,105 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Layout title="Page not found — PilotLab" description="That page isn't in the lab." noindex>
+	<Nav />
+
+	<section class="wrap">
+		<div class="code">404<span class="pulse"></span></div>
+		<h1>This experiment<br /><span class="accent">doesn't exist</span></h1>
+		<p>
+			The page you're after was moved, renamed, or never left the whiteboard. The work that does
+			exist is worth the detour.
+		</p>
+		<div class="links">
+			<a href="/lab" class="primary">See the lab →</a>
+			<a href="/" class="secondary">Back to start</a>
+		</div>
+	</section>
+
+	<Footer bordered />
+</Layout>
+
+<style>
+	.wrap {
+		padding: 96px 48px 120px;
+		min-height: calc(100vh - 300px);
+	}
+	.code {
+		font-family: var(--sora);
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		color: var(--blue);
+	}
+	.pulse {
+		display: inline-block;
+		width: 32px;
+		height: 8px;
+		background: var(--blue);
+		margin-left: 10px;
+		animation: plPulse 2.4s infinite;
+	}
+	h1 {
+		font-family: var(--sora);
+		font-size: clamp(48px, 7.5vw, 96px);
+		line-height: 0.98;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		text-transform: uppercase;
+		margin-top: 20px;
+	}
+	.accent {
+		color: var(--blue);
+	}
+	p {
+		font-size: 18px;
+		line-height: 1.6;
+		max-width: 440px;
+		margin-top: 28px;
+		color: var(--body);
+		text-wrap: pretty;
+	}
+	.links {
+		display: flex;
+		gap: 14px;
+		margin-top: 40px;
+	}
+	.primary {
+		padding: 15px 30px;
+		background: var(--blue);
+		color: #fff;
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: all 0.2s;
+	}
+	.primary:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+	.secondary {
+		padding: 15px 30px;
+		border: 1.5px solid var(--ink);
+		font-family: var(--sora);
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: all 0.2s;
+	}
+	.secondary:hover {
+		background: var(--ink);
+		color: #fff;
+	}
+	@media (max-width: 900px) {
+		.wrap {
+			padding: 64px 20px 80px;
+		}
+	}
+</style>

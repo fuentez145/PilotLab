@@ -6,15 +6,34 @@ interface Props {
 	description?: string;
 	/** og:type — 'article' reads better for case studies; default 'website'. */
 	ogType?: 'website' | 'article';
+	/** Absolute or site-relative URL overriding the default social card. */
+	ogImage?: string;
+	ogImageAlt?: string;
+	/** Keep crawlers off utility pages (404). */
+	noindex?: boolean;
 	/** JSON-LD nodes; wrapped in a single @graph script tag. */
 	schema?: Record<string, unknown>[];
 }
 
-const { title, description = SITE.description, ogType = 'website', schema = [] } = Astro.props;
+const {
+	title,
+	description = SITE.description,
+	ogType = 'website',
+	ogImage: ogImageProp,
+	ogImageAlt = `${SITE.name} — ${SITE.tagline}`,
+	noindex = false,
+	schema = [],
+} = Astro.props;
 
-const siteUrl = (Astro.site?.href ?? 'https://pilotlab.dev/').replace(/\/$/, '');
-const canonical = `${siteUrl}${Astro.url.pathname.replace(/\/$/, '') || '/'}`;
-const ogImage = `${siteUrl}/og.png`;
+const siteUrl = (Astro.site?.href ?? 'https://pilotlab.cloud/').replace(/\/$/, '');
+// Trailing slash matches the sitemap and the built directory format exactly.
+const pathname = Astro.url.pathname.endsWith('/') ? Astro.url.pathname : `${Astro.url.pathname}/`;
+const canonical = `${siteUrl}${pathname}`;
+const ogImage = ogImageProp
+	? ogImageProp.startsWith('http')
+		? ogImageProp
+		: `${siteUrl}${ogImageProp}`
+	: `${siteUrl}/og.png`;
 const jsonLd =
 	schema.length > 0 ? JSON.stringify({ '@context': 'https://schema.org', '@graph': schema }) : null;
 ---
@@ -25,9 +44,11 @@ const jsonLd =
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
 		<title>{title}</title>
+		{noindex && <meta name="robots" content="noindex" />}
 		<link rel="canonical" href={canonical} />
 		<meta name="theme-color" content="#0e1c33" />
 		<link rel="sitemap" href="/sitemap-index.xml" />
@@ -39,9 +60,15 @@ const jsonLd =
 		<meta property="og:description" content={description} />
 		<meta property="og:url" content={canonical} />
 		<meta property="og:image" content={ogImage} />
-		<meta property="og:image:width" content="1200" />
-		<meta property="og:image:height" content="630" />
-		<meta property="og:image:alt" content={`${SITE.name} — ${SITE.tagline}`} />
+		{
+			!ogImageProp && (
+				<>
+					<meta property="og:image:width" content="1200" />
+					<meta property="og:image:height" content="630" />
+				</>
+			)
+		}
+		<meta property="og:image:alt" content={ogImageAlt} />
 		<meta property="og:locale" content="en_US" />
 
 		<!-- Twitter -->

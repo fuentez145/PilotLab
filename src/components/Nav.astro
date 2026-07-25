@@ -1,6 +1,6 @@
 ---
 interface Props {
-	active?: 'services' | 'lab' | 'about' | 'contact';
+	active?: 'services' | 'lab' | 'insights' | 'about' | 'contact';
 }
 
 const { active } = Astro.props;
@@ -11,9 +11,20 @@ const { active } = Astro.props;
 	<nav class="links">
 		<a href="/services" class:list={{ active: active === 'services' }}>Services</a>
 		<a href="/lab" class:list={{ active: active === 'lab' }}>Lab</a>
+		<a href="/insights" class:list={{ active: active === 'insights' }}>Insights</a>
 		<a href="/about" class:list={{ active: active === 'about' }}>About</a>
 		<a href="/contact" class:list={{ active: active === 'contact' }}>Contact</a>
 	</nav>
+	<details class="mobile-menu">
+		<summary aria-label="Open navigation menu">Menu <span>+</span></summary>
+		<nav class="mobile-links">
+			<a href="/services">Services</a>
+			<a href="/lab">Lab</a>
+			<a href="/insights">Insights</a>
+			<a href="/about">About</a>
+			<a href="/contact">Contact</a>
+		</nav>
+	</details>
 	<a class="start" href="/contact">Start a project</a>
 	<script src="https://analytics.ahrefs.com/analytics.js" data-key="2OkR3e7d8wSFWa4jYMl+4w" async></script>
 </header>
@@ -65,12 +76,64 @@ const { active } = Astro.props;
 		background: var(--ink);
 		color: #fff;
 	}
+	.mobile-menu {
+		display: none;
+		position: relative;
+	}
+	.mobile-menu summary {
+		list-style: none;
+		cursor: pointer;
+		padding: 10px 0 10px 12px;
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+	.mobile-menu summary::-webkit-details-marker {
+		display: none;
+	}
+	.mobile-menu summary span {
+		color: var(--blue);
+		font-size: 18px;
+		margin-left: 5px;
+	}
+	.mobile-menu[open] summary span {
+		display: inline-block;
+		transform: rotate(45deg);
+	}
+	.mobile-links {
+		position: absolute;
+		top: calc(100% + 12px);
+		right: 0;
+		display: grid;
+		min-width: 190px;
+		padding: 8px;
+		background: var(--bg);
+		border: 1.5px solid var(--ink);
+		box-shadow: 6px 6px 0 var(--ink);
+	}
+	.mobile-links a {
+		padding: 13px 14px;
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.mobile-links a:hover {
+		background: var(--ink);
+		color: #fff;
+	}
 	@media (max-width: 760px) {
 		.nav {
-			padding: 16px 20px;
+			padding: 14px 20px;
 		}
 		.links {
-			gap: 18px;
+			display: none;
+		}
+		.mobile-menu {
+			display: block;
+			margin-left: auto;
+			margin-right: 10px;
 		}
 		.start {
 			display: none;

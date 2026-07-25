@@ -1,0 +1,89 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import { articles } from '../../data/articles';
+import { breadcrumbSchema, organizationSchema } from '../../data/site';
+
+export function getStaticPaths() {
+	return articles.map((article) => ({ params: { slug: article.slug }, props: { article } }));
+}
+
+const { article } = Astro.props;
+const siteUrl = Astro.site!.href.replace(/\/$/, '');
+const articleUrl = `${siteUrl}/insights/${article.slug}`;
+---
+
+<Layout
+	title={`${article.title} | PilotLab`}
+	description={article.dek}
+	ogType="article"
+	schema={[
+		organizationSchema(siteUrl),
+		breadcrumbSchema(siteUrl, [
+			{ name: 'Home', path: '/' },
+			{ name: 'Insights', path: '/insights' },
+			{ name: article.title, path: `/insights/${article.slug}` },
+		]),
+		{
+			'@type': 'Article',
+			'@id': `${articleUrl}/#article`,
+			headline: article.title,
+			description: article.dek,
+			datePublished: article.published,
+			dateModified: article.updated,
+			mainEntityOfPage: articleUrl,
+			author: { '@id': `${siteUrl}/#organization` },
+			publisher: { '@id': `${siteUrl}/#organization` },
+		},
+	]}
+>
+	<Nav active="insights" />
+	<main>
+		<article class="article">
+			<a href="/insights" class="back">← All insights</a>
+			<div class="article-head">
+				<div class="meta"><span>{article.category}</span><span>{article.readTime}</span><span>Updated {article.updated}</span></div>
+				<h1>{article.title}</h1>
+				<p class="dek">{article.dek}</p>
+				<p class="keyword">Focus topic: {article.keyword}</p>
+			</div>
+			<div class="article-body">
+				<p class="lead">{article.intro}</p>
+				{article.sections.map((section) => (
+					<section>
+						<h2>{section.heading}</h2>
+						{section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+						{section.bullets && <ul>{section.bullets.map((bullet) => <li>{bullet}</li>)}</ul>}
+					</section>
+				))}
+				<div class="article-cta"><strong>Building a workflow like this?</strong><a href="/contact">Start with a clear scope →</a></div>
+			</div>
+		</article>
+	</main>
+	<Footer />
+</Layout>
+
+<style>
+	.article { padding: 64px 48px 100px; }
+	.back { color: var(--muted); font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+	.back:hover { color: var(--blue); }
+	.article-head { max-width: 980px; margin: 52px auto 0; text-align: center; }
+	.meta { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+	.article h1 { margin-top: 28px; font-family: var(--sora); font-size: clamp(42px, 6.5vw, 82px); line-height: 1.02; font-weight: 800; letter-spacing: -.045em; text-transform: uppercase; }
+	.dek { max-width: 720px; margin: 28px auto 0; color: var(--body); font-size: 20px; line-height: 1.6; text-wrap: pretty; }
+	.keyword { margin-top: 22px; color: var(--muted); font-size: 13px; }
+	.article-body { max-width: 720px; margin: 88px auto 0; }
+	.lead { font-family: var(--sora); font-size: 25px; line-height: 1.45; letter-spacing: -.015em; }
+	.article-body section { margin-top: 60px; }
+	.article-body h2 { font-family: var(--sora); font-size: clamp(25px, 3vw, 36px); line-height: 1.1; letter-spacing: -.03em; }
+	.article-body p, .article-body li { color: var(--body); font-size: 17px; line-height: 1.75; }
+	.article-body section p { margin-top: 18px; }
+	.article-body ul { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; }
+	.article-body li { display: flex; gap: 12px; }
+	.article-body li::before { content: '◆'; flex: 0 0 auto; color: var(--blue); font-size: 11px; padding-top: 6px; }
+	.article-cta { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 80px; padding: 28px; background: var(--blue); color: #fff; font-family: var(--sora); }
+	.article-cta a { color: #fff; font-weight: 700; }
+	.article-cta a:hover { color: var(--ink); }
+	@media (max-width: 900px) { .article { padding-left: 20px; padding-right: 20px; } .article-head { margin-top: 40px; } .article-body { margin-top: 64px; } .article-cta { align-items: flex-start; flex-direction: column; } }
+</style>

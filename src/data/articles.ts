@@ -321,4 +321,69 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-idempotent-webhook-handler',
+		title: 'How to Build an Idempotent Webhook Handler',
+		dek: 'A practical design for receiving retries safely, verifying signatures, acknowledging quickly, and moving side effects into a controlled worker.',
+		published: '2026-07-26',
+		updated: '2026-07-26',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to build an idempotent webhook handler',
+		intro: 'Webhooks are delivery attempts, not exactly-once commands. Providers retry when your endpoint is slow or unavailable, operators may redeliver an event, and queues can surface the same message more than once. An idempotent handler makes those realities safe: the same event can arrive repeatedly without charging a customer twice, creating duplicate records, or triggering the same notification forever.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Stripe Docs — Receive events in your webhook endpoint', url: 'https://docs.stripe.com/webhooks' },
+			{ label: 'GitHub Docs — Automatically redelivering failed webhook deliveries', url: 'https://docs.github.com/en/webhooks/using-webhooks/automatically-redelivering-failed-deliveries-for-a-repository-webhook' },
+			{ label: 'AWS Docs — Amazon SQS at-least-once delivery', url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/standard-queues-at-least-once-delivery.html' },
+		],
+		sections: [
+			{
+				heading: 'Start with the delivery model',
+				paragraphs: [
+					'Before writing the route, assume duplicates, retries, and out-of-order delivery. Stripe documents automatic retries for failed deliveries and says event ordering is not guaranteed. GitHub also provides redelivery tools for failed deliveries. The implication is simple: your endpoint must be safe when the same logical event is delivered again, and it must not infer state from arrival order alone.',
+					'This tutorial uses a provider-neutral shape. The provider-specific parts are signature verification, event identifiers, and the API used to recover a missed object. Keep those details at the edge of your application so the business handler can use one internal event contract.',
+				],
+				bullets: ['A public HTTPS POST endpoint', 'A durable database with a unique constraint', 'A queue or background-job mechanism', 'A provider signing secret stored outside source control', 'A test event and a way to inspect delivery logs'],
+			},
+			{
+				heading: 'Verify first, then deduplicate atomically',
+				paragraphs: [
+					'Read the raw request body, verify the provider signature with its official library, and reject invalid requests before parsing or acting on the payload. Stripe specifically requires the raw body for signature verification and recommends checking the signed timestamp to reduce replay risk. Do not replace this with an API key check or a secret query parameter.',
+					'After verification, insert a receipt keyed by the provider event ID. Make that key unique in the database. The insert must be atomic: a “check then insert” implemented as two separate queries can still process the event twice when two deliveries arrive concurrently.',
+				],
+				bullets: ['Store provider, event ID, event type, received time, and processing status', 'Use a unique key such as (provider, event_id)', 'Keep the raw payload only as long as your retention policy allows', 'Treat a second insert conflict as a duplicate, not as a server error'],
+			},
+			{
+				heading: 'Acknowledge quickly and process asynchronously',
+				paragraphs: [
+					'Once the signature is valid and the receipt has been durably recorded or queued, return a 2xx response quickly. Stripe explicitly recommends acknowledging before complex logic and recommends asynchronous processing to absorb delivery spikes. Do not make the provider wait for an email, a slow third-party API, or a multi-step database workflow.',
+					'A useful state machine is received, processing, processed, and failed. The worker claims a received event, performs the business operation, and marks it processed in the same consistency model as the operation itself. If the worker crashes, a lease timeout or retry policy should make the event visible again.',
+				],
+				bullets: ['Return 2xx only after the receipt is durable', 'Put a bounded retry policy around transient downstream errors', 'Use a dead-letter path for events that need human inspection', 'Emit a correlation ID linking the delivery, job, and business record'],
+			},
+			{
+				heading: 'Make the business operation idempotent too',
+				paragraphs: [
+					'Deduplicating at the webhook table is necessary but not always sufficient. A crash can occur after a side effect succeeds and before the receipt is marked processed. Design the side effect with its own idempotency key: for example, store the provider event ID on the fulfillment record, use a provider-supported idempotency key for outbound requests, or apply a unique constraint to the record being created.',
+					'Keep event handling independent of arrival order. If an update references an object you have not seen, retrieve the current object from the provider API or defer the event rather than inventing an intermediate state. AWS makes the same general point for standard SQS queues: consumers should be idempotent because a message can be received again.',
+			],
+			},
+			{
+				heading: 'Test the failure modes, not just the happy path',
+				paragraphs: [
+					'Use the provider CLI or a sandbox to send a real signed event to a local endpoint, then exercise the endpoint repeatedly. Confirm that one event produces one business outcome even when the delivery is duplicated, two workers race, the worker crashes after the side effect, or the provider sends an event before a related event.',
+					'In production, monitor delivery latency, non-2xx responses, duplicate receipt counts, queue age, retry counts, and dead-letter events. A duplicate is expected occasionally; an unexplained rise in duplicates or failed acknowledgements is an operational signal. GitHub’s redelivery guidance also demonstrates recording a time window and grouping deliveries by a stable GUID before retrying, rather than blindly replaying every failed attempt.',
+				],
+				bullets: ['Send the same signed payload twice and expect one side effect', 'Run two workers against the same event and expect one winner', 'Send an invalid signature and expect no database or business write', 'Force a downstream timeout and verify retry plus eventual recovery', 'Replay an old signed payload and verify your timestamp policy'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'Before connecting a webhook to customer-visible or financial actions, review the whole path from request to side effect. The endpoint is a small API surface, but its reliability comes from the database constraint, queue semantics, worker recovery, and observability around it.',
+				],
+				bullets: ['Signature verification uses the raw body and a managed secret', 'The receipt table has a database-enforced unique event key', 'The endpoint returns 2xx only after durable receipt or enqueue', 'Business writes have their own idempotency protection', 'Retries are bounded and dead-lettered with an operator path', 'Logs exclude secrets and include provider/event correlation IDs', 'Runbooks explain replay, redelivery, and safe recovery'],
+			},
+		],
+	},
 ];

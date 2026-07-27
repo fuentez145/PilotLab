@@ -386,4 +386,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-api-rate-limits-multi-tenant-saas',
+		title: 'How to Design API Rate Limits for a Multi-Tenant SaaS',
+		dek: 'A practical guide to choosing rate-limit keys, token-bucket targets, useful 429 responses, and the tests that keep one noisy tenant from hurting everyone else.',
+		published: '2026-07-27',
+		updated: '2026-07-27',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to design API rate limits for a multi-tenant SaaS',
+		intro: 'Rate limiting is not just a middleware switch. In a multi-tenant SaaS, it is a product and reliability contract: which caller is limited, which operations consume capacity, what happens during a burst, and how a client can recover without turning a 429 into a retry storm. This tutorial lays out a provider-neutral design you can implement at the API boundary and evolve with measured traffic.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 6585 — 429 Too Many Requests', url: 'https://www.rfc-editor.org/rfc/rfc6585#section-4' },
+			{ label: 'IETF RFC 9457 — Problem Details for HTTP APIs', url: 'https://www.rfc-editor.org/rfc/rfc9457' },
+			{ label: 'Amazon API Gateway — Request throttling', url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-request-throttling.html' },
+			{ label: 'MDN — 429 Too Many Requests', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define the contract before the counter',
+				paragraphs: [
+					'You need an authenticated API, a way to identify the tenant and application, a shared store or gateway that all instances can consult, and request metrics with route and tenant dimensions. Do not begin by picking “100 requests per minute” from intuition. First inventory the operations and their cost: a read-heavy search endpoint, a file export, and a password-reset endpoint should not necessarily consume the same capacity.',
+					'Decide what the limit protects and what the client should do when it is reached. RFC 6585 defines 429 Too Many Requests for rate limiting and says the response may include Retry-After. That gives clients a protocol signal, but your API still needs a stable policy they can understand.',
+				],
+				bullets: ['List the routes and downstream resources the limit protects', 'Choose a tenant identifier from verified authentication, not an untrusted header', 'Record baseline requests, latency, errors, and burst patterns for each route', 'Document whether limits are a target, a hard quota, or an abuse-control backstop'],
+			},
+			{
+				heading: 'Choose keys that match the isolation you promise',
+				paragraphs: [
+					'For a multi-tenant product, the primary key should usually include the tenant ID and a meaningful scope such as API key, user, route group, or region. A single global counter protects infrastructure but lets one customer consume the capacity intended for everybody. A per-IP counter is useful for unauthenticated abuse controls, but it is a poor substitute for tenant identity behind NATs or shared corporate networks.',
+					'Use layers rather than one giant number: an edge or IP limit for obvious abuse, a tenant limit for fairness, and a route or operation limit for expensive work. Keep authentication and authorization ahead of the tenant counter so an attacker cannot create arbitrary buckets by changing an input identifier.',
+				],
+				bullets: ['Infrastructure: protect the whole service and dependency', 'Tenant: preserve fair capacity between customers', 'Credential: isolate one API key or integration', 'Operation: spend more capacity on expensive endpoints', 'Concurrency: cap long-running exports or jobs separately from request rate'],
+			},
+			{
+				heading: 'Implement a token bucket with explicit targets',
+				paragraphs: [
+					'A token bucket gives each key a refill rate and a maximum burst. A request consumes one or more tokens; if enough are available, it proceeds, otherwise the API rejects it. The refill rate represents sustained capacity and the bucket size represents the burst you are willing to absorb. Amazon API Gateway documents this model and cautions that configured throttling and quotas are best-effort targets, not guaranteed ceilings.',
+					'For a first version, keep the decision at one atomic operation in a shared store. The operation should read the current token count and timestamp, calculate refill, consume the cost, and write the new state with an expiry. A local in-memory counter is acceptable for a single process experiment, but it becomes inconsistent as soon as requests reach multiple instances or a deploy replaces the process.',
+					'Choose limits from observed traffic and dependency budgets. If an export can hold a worker for seconds, use a separate concurrency limit or queue rather than pretending a request-per-minute number controls that cost. Return the active policy in documentation and, where useful, response headers so clients can build backpressure instead of guessing.',
+				],
+			},
+			{
+				heading: 'Make 429 responses safe and useful',
+				paragraphs: [
+					'Return 429 when the request is valid but the applicable rate policy says to slow down. Include Retry-After when you can calculate a meaningful wait, and make the body machine-readable. RFC 9457 defines the application/problem+json format with fields such as type, title, status, detail, and instance; it also warns against exposing implementation details or sensitive information in error responses.',
+					'Keep the client instruction specific: identify the limit scope without revealing another tenant’s data, give the retry delay, and include a request or instance ID that support can find in logs. Clients should honor Retry-After, apply jitter, cap retries, and avoid retrying non-idempotent work blindly. Server-side rate limiting is not a license for every SDK to retry immediately.',
+				],
+				bullets: ['HTTP status: 429 Too Many Requests', 'Content type: application/problem+json when using problem details', 'Retry-After: a delta in seconds or an HTTP date', 'Stable problem type and a support-safe instance or request ID', 'No stack traces, secrets, internal hostnames, or cross-tenant details'],
+			},
+			{
+				heading: 'Test fairness, failure, and recovery',
+				paragraphs: [
+					'Test the limiter as a distributed component, not only as a unit function. Send a sustained load at the configured refill rate, then a permitted burst. Run two API instances against the same key and verify that the aggregate behavior stays within the intended target. Run two tenants in parallel and confirm that a noisy tenant does not exhaust the other tenant’s bucket.',
+					'Exercise the uncomfortable paths: the shared store is unavailable, the clock moves, a request is retried after a 429, a client sends a duplicate non-idempotent request, and a deployment changes the policy. Choose a deliberate fail-open or fail-closed behavior for each class of route. Failing open may protect availability for low-risk reads; failing closed may be safer for expensive or security-sensitive operations. Make that decision visible in the runbook.',
+				],
+				bullets: ['Assert 429 plus Retry-After at the boundary', 'Verify two instances update one bucket atomically', 'Verify tenant A cannot consume tenant B’s capacity', 'Measure false positives and legitimate requests rejected', 'Alert on limiter-store errors, 429 rate, queue age, and retry amplification'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'Rate limits work when they are explainable, observable, and adjustable. Start with a small number of policy classes, publish the behavior, and review the evidence after real traffic arrives. Do not promise an exact ceiling if the enforcement layer is best-effort or if multiple layers can reject independently.',
+				],
+				bullets: ['The key is derived from authenticated tenant and credential context', 'The shared decision is atomic across all application instances', 'Expensive work has a separate queue or concurrency guard', '429 responses include actionable retry information', 'Clients use bounded exponential backoff with jitter', 'Policies, overrides, and emergency blocks are audited', 'Dashboards show limits by route, tenant, status, and dependency', 'A runbook explains policy changes, store outages, and safe overrides'],
+			},
+		],
+	},
 ];

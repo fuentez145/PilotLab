@@ -31,9 +31,14 @@ const sortedArticles = [...articles].sort((a, b) => {
 			<h1>Useful ideas<br /><span class="accent">for building.</span></h1>
 			<p class="intro">Practical notes on software development, platform engineering, and AI systems that help teams ship with more clarity.</p>
 		</section>
+		<section class="search-panel" aria-label="Search Insights">
+			<label for="insights-search">Search Insights</label>
+			<input id="insights-search" type="search" placeholder="Search tutorials, AI, APIs, architecture..." autocomplete="off" />
+			<p id="search-status" class="search-status" aria-live="polite"></p>
+		</section>
 		<section id="insights-list" class="article-list" aria-label="Insights articles">
 			{sortedArticles.map((article) => (
-				<a class="article-card" href={`/insights/${article.slug}`}>
+				<a class="article-card" href={`/insights/${article.slug}`} data-search={`${article.title} ${article.dek} ${article.category} ${article.keyword}`}>
 					<div class="article-meta"><span>{article.category}</span><span>{article.updated || article.published} · {article.readTime}</span></div>
 					<h2>{article.title}</h2>
 					<p>{article.dek}</p>
@@ -56,6 +61,11 @@ const sortedArticles = [...articles].sort((a, b) => {
 	.hero h1 { margin-top: 24px; font-family: var(--sora); font-size: clamp(50px, 8.1vw, 104px); line-height: .98; font-weight: 800; letter-spacing: -.04em; text-transform: uppercase; }
 	.accent { color: var(--blue); }
 	.intro { max-width: 620px; margin-top: 32px; color: var(--body); font-size: 19px; line-height: 1.65; text-wrap: pretty; }
+	.search-panel { display: grid; gap: 10px; padding: 28px 48px 0; }
+	.search-panel label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+	.search-panel input { width: min(100%, 620px); padding: 15px 16px; border: 1.5px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; }
+	.search-panel input:focus { outline: 3px solid var(--blue); outline-offset: 3px; }
+	.search-status { min-height: 1.4em; color: var(--body); font-size: 14px; }
 	.article-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 48px; }
 	.article-list .article-card:nth-child(n + 6) { display: none; }
 	.article-list.is-expanded .article-card:nth-child(n + 6) { display: flex; }
@@ -69,12 +79,31 @@ const sortedArticles = [...articles].sort((a, b) => {
 	.article-card p { max-width: 560px; margin-top: 18px; color: var(--body); font-size: 16px; line-height: 1.65; }
 	.article-card:hover p { color: #dbe4f5; }
 	.read { margin-top: auto; padding-top: 28px; font-size: 14px; font-weight: 700; }
-	@media (max-width: 900px) { .hero, .article-list { padding-left: 20px; padding-right: 20px; } .article-list { grid-template-columns: 1fr; } .show-more-wrap { padding-left: 20px; padding-right: 20px; } }
+	@media (max-width: 900px) { .hero, .article-list { padding-left: 20px; padding-right: 20px; } .article-list { grid-template-columns: 1fr; } .search-panel { padding-left: 20px; padding-right: 20px; } .show-more-wrap { padding-left: 20px; padding-right: 20px; } }
 </style>
 
 <script>
 	const list = document.querySelector<HTMLElement>('#insights-list');
+	const cards = Array.from(document.querySelectorAll<HTMLElement>('.article-card'));
+	const searchInput = document.querySelector<HTMLInputElement>('#insights-search');
+	const searchStatus = document.querySelector<HTMLElement>('#search-status');
 	const showMore = document.querySelector<HTMLButtonElement>('.show-more');
+
+	searchInput?.addEventListener('input', () => {
+		const query = searchInput.value.trim().toLowerCase();
+		if (!query) {
+			cards.forEach((card) => { card.style.display = ''; });
+			if (showMore) showMore.hidden = false;
+			if (searchStatus) searchStatus.textContent = '';
+			return;
+		}
+
+		const matches = cards.filter((card) => (card.dataset.search || card.textContent || '').toLowerCase().includes(query));
+		cards.forEach((card) => { card.style.display = matches.includes(card) ? 'flex' : 'none'; });
+		if (showMore) showMore.hidden = true;
+		if (list) list.classList.add('is-expanded');
+		if (searchStatus) searchStatus.textContent = `${matches.length} ${matches.length === 1 ? 'insight' : 'insights'} found`;
+	});
 
 	showMore?.addEventListener('click', () => {
 		list?.classList.add('is-expanded');

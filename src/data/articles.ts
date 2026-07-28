@@ -453,4 +453,77 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'add-opentelemetry-tracing-node-api',
+		title: 'How to Add OpenTelemetry Tracing to a Node.js API',
+		dek: 'Instrument an Express API before application code loads, verify trace context across requests, and make the first production signals useful without leaking sensitive data.',
+		published: '2026-07-28',
+		updated: '2026-07-28',
+		readTime: '11 min read',
+		category: 'Platform engineering',
+		keyword: 'how to add OpenTelemetry tracing to a Node.js API',
+		intro: 'Distributed failures are hard to debug when an API only tells you that a request was slow. OpenTelemetry gives a Node.js service a standard way to connect an incoming request to the work it triggers, but the setup order and data policy matter. This tutorial starts with console output so you can verify the wiring, then shows the production decisions you should make before exporting telemetry to a collector or vendor.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OpenTelemetry Docs — Node.js getting started', url: 'https://opentelemetry.io/docs/languages/js/getting-started/nodejs/' },
+			{ label: 'OpenTelemetry JavaScript — README and examples', url: 'https://github.com/open-telemetry/opentelemetry-js' },
+			{ label: 'OpenTelemetry Semantic Conventions — HTTP spans', url: 'https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-spans.md' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites and the shape of the solution',
+				paragraphs: [
+					'You need a Node.js API, a package manager, and a way to inspect output locally. The example assumes an Express application, but OpenTelemetry’s Node.js guide also points to instrumentation for other frameworks. Start with traces and a console exporter; moving to an OTLP exporter is a separate deployment decision.',
+					'The critical detail is load order. The OpenTelemetry SDK and automatic instrumentations must initialize before the modules they patch are imported. If Express, HTTP, or a database client loads first, you can get a healthy-looking app with missing spans.',
+				],
+				bullets: ['Node.js and an existing API you can run locally', 'A test route that makes at least one downstream request', 'A repeatable start command', 'A local log or collector destination for telemetry'],
+			},
+			{
+				heading: 'Install the Node SDK and automatic instrumentation',
+				paragraphs: [
+					'For an existing JavaScript or TypeScript service, add the Node SDK and the automatic-instrumentations meta-package. The official OpenTelemetry example uses these packages to initialize a NodeSDK and discover supported libraries such as HTTP and Express. Pin versions with the rest of your application dependencies and review the package compatibility notes when upgrading.',
+					'Create an instrumentation entry point separate from your application entry point. A minimal TypeScript version is below. ConsoleSpanExporter is intentionally used for the first verification: it makes a trace visible without requiring a vendor account or collector.',
+				],
+				bullets: ['npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/sdk-trace-node', 'Keep instrumentation startup free of application business logic', 'Load the instrumentation module before the API entry point'],
+			},
+			{
+				heading: 'Initialize before the API starts',
+				paragraphs: [
+					'Create instrumentation.ts (or an equivalent JavaScript module) and start the SDK before importing your server. The exact TypeScript loader depends on your runtime; the important part is that the instrumentation module is imported first. OpenTelemetry’s Node.js guide demonstrates the same ordering with Node’s --import flag.',
+					'Example configuration:',
+				],
+				bullets: [
+					"import { NodeSDK } from '@opentelemetry/sdk-node';",
+					"import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-node';",
+					"import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';",
+					'const sdk = new NodeSDK({ traceExporter: new ConsoleSpanExporter(), instrumentations: [getNodeAutoInstrumentations()] });',
+					'await sdk.start();',
+					'Run your service with the instrumentation module first, for example: npx tsx --import ./instrumentation.ts app.ts.',
+				],
+			},
+			{
+				heading: 'Verify the trace, then add useful boundaries',
+				paragraphs: [
+					'Call an API route and inspect the console. You should see a server span for the incoming request and, when the route makes an instrumented outbound request, a child client span. Confirm that the route, method, status, and duration are useful without placing customer IDs, authorization headers, request bodies, or query secrets into span attributes.',
+					'OpenTelemetry’s HTTP semantic conventions describe stable names and attributes for HTTP spans. Use framework and instrumentation defaults where possible rather than inventing a different vocabulary for every service. Add manual spans only around meaningful work—such as a queue publish, a cache miss, or a business operation—and keep names low-cardinality.',
+				],
+				bullets: ['One request should have one coherent trace ID', 'A downstream HTTP call should appear as a child span when instrumented', 'Errors should record status and exception context without sensitive payloads', 'Route names should be templates such as /orders/:id, not raw IDs'],
+			},
+			{
+				heading: 'Move from console output to production telemetry',
+				paragraphs: [
+					'The console exporter is a wiring test, not an operations backend. In production, export through OTLP to a collector or observability provider and configure the destination with environment variables or deployment secrets. A collector can centralize batching, retry, filtering, and routing so application code does not depend on one vendor.',
+					'Set a sampling policy deliberately. Capturing every trace may be useful while diagnosing a small service, but cost and volume change as traffic grows. Keep error traces and representative slow traces, and make the policy visible in the runbook. Telemetry must also obey your retention and privacy requirements: redact or avoid sensitive attributes before export, and restrict who can query them.',
+				],
+			},
+			{
+				heading: 'Test the failure modes and keep a checklist',
+				paragraphs: [
+					'Testing observability means checking the signals when the system is unhealthy, not just confirming that a log line exists. Add a route test that makes a downstream call, a failed-request test, and a startup test that fails clearly when telemetry configuration is invalid. Then compare the trace to your request ID and application logs so operators can move between systems.',
+					'Before enabling the integration for all traffic, review the operational contract with the team that will own it. OpenTelemetry standardizes collection and context propagation; it does not decide your retention, alert thresholds, access controls, or incident workflow.',
+				],
+				bullets: ['Start the API with instrumentation loaded first', 'Assert a request produces a server span and expected child spans', 'Exercise a 4xx and 5xx path and inspect error attributes', 'Check that retries do not create confusing duplicate business spans', 'Verify no secrets, tokens, raw bodies, or high-cardinality IDs are exported', 'Document exporter, sampling, retention, access, and rollback settings'],
+			},
+		],
+	},
 ];

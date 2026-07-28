@@ -6,6 +6,11 @@ import { articles } from '../../data/articles';
 import { breadcrumbSchema, organizationSchema } from '../../data/site';
 
 const siteUrl = Astro.site!.href.replace(/\/$/, '');
+const sortedArticles = [...articles].sort((a, b) => {
+	const dateA = a.updated || a.published;
+	const dateB = b.updated || b.published;
+	return dateB.localeCompare(dateA);
+});
 ---
 
 <Layout
@@ -26,16 +31,21 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 			<h1>Useful ideas<br /><span class="accent">for building.</span></h1>
 			<p class="intro">Practical notes on software development, platform engineering, and AI systems that help teams ship with more clarity.</p>
 		</section>
-		<section class="article-list">
-			{articles.map((article) => (
+		<section id="insights-list" class="article-list" aria-label="Insights articles">
+			{sortedArticles.map((article) => (
 				<a class="article-card" href={`/insights/${article.slug}`}>
-					<div class="article-meta"><span>{article.category}</span><span>{article.readTime}</span></div>
+					<div class="article-meta"><span>{article.category}</span><span>{article.updated || article.published} · {article.readTime}</span></div>
 					<h2>{article.title}</h2>
 					<p>{article.dek}</p>
 					<span class="read">Read the field note →</span>
 				</a>
 			))}
 		</section>
+		{sortedArticles.length > 5 && (
+			<div class="show-more-wrap">
+				<button class="show-more" type="button" aria-expanded="false" aria-controls="insights-list">Show more insights</button>
+			</div>
+		)}
 	</main>
 	<Footer />
 </Layout>
@@ -47,6 +57,11 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	.accent { color: var(--blue); }
 	.intro { max-width: 620px; margin-top: 32px; color: var(--body); font-size: 19px; line-height: 1.65; text-wrap: pretty; }
 	.article-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 48px; }
+	.article-list .article-card:nth-child(n + 6) { display: none; }
+	.article-list.is-expanded .article-card:nth-child(n + 6) { display: flex; }
+	.show-more-wrap { display: flex; justify-content: center; padding: 0 48px 64px; }
+	.show-more { padding: 14px 22px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .2s, color .2s; }
+	.show-more:hover { background: var(--ink); color: #fff; }
 	.article-card { display: flex; flex-direction: column; min-height: 330px; padding: 32px; border: 1.5px solid var(--ink); color: inherit; transition: transform .25s, background .25s, color .25s; }
 	.article-card:hover { background: var(--ink); color: #fff; transform: translateY(-5px); }
 	.article-meta { display: flex; justify-content: space-between; gap: 16px; color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -54,5 +69,16 @@ const siteUrl = Astro.site!.href.replace(/\/$/, '');
 	.article-card p { max-width: 560px; margin-top: 18px; color: var(--body); font-size: 16px; line-height: 1.65; }
 	.article-card:hover p { color: #dbe4f5; }
 	.read { margin-top: auto; padding-top: 28px; font-size: 14px; font-weight: 700; }
-	@media (max-width: 900px) { .hero, .article-list { padding-left: 20px; padding-right: 20px; } .article-list { grid-template-columns: 1fr; } }
+	@media (max-width: 900px) { .hero, .article-list { padding-left: 20px; padding-right: 20px; } .article-list { grid-template-columns: 1fr; } .show-more-wrap { padding-left: 20px; padding-right: 20px; } }
 </style>
+
+<script>
+	const list = document.querySelector<HTMLElement>('#insights-list');
+	const showMore = document.querySelector<HTMLButtonElement>('.show-more');
+
+	showMore?.addEventListener('click', () => {
+		list?.classList.add('is-expanded');
+		showMore.setAttribute('aria-expanded', 'true');
+		showMore.hidden = true;
+	});
+</script>

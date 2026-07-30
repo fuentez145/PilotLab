@@ -526,4 +526,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-reliable-background-job-worker-node',
+		title: 'How to Build a Reliable Background Job Worker in Node.js',
+		dek: 'A practical queue design for long-running API work: durable jobs, bounded retries, idempotent handlers, visibility timeouts, and an operator-friendly dead-letter path.',
+		published: '2026-07-30',
+		updated: '2026-07-30',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to build a reliable background job worker in Node.js',
+		intro: 'A background worker is more than a function that runs outside the request. It is a small distributed system with delivery semantics, timeouts, retries, concurrency, and recovery paths. This tutorial shows how to turn a slow API operation into a durable job without promising exactly-once execution that your queue cannot provide.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'BullMQ — Retrying failing jobs', url: 'https://docs.bullmq.io/guide/retrying-failing-jobs' },
+			{ label: 'BullMQ — Idempotent jobs', url: 'https://docs.bullmq.io/patterns/idempotent-jobs' },
+			{ label: 'AWS SQS — Visibility timeout', url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html' },
+			{ label: 'AWS SQS — Dead-letter queues', url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define the job contract',
+				paragraphs: [
+					'Use a worker when the operation may outlive a useful HTTP request, needs retries, or should not consume web-server capacity. Examples include generating an export, resizing uploaded media, synchronizing a third-party system, or sending a batch of notifications. The API should create a job and return a status reference; the worker should own the long-running work.',
+					'Before choosing a queue library, write the contract. Name the job type, payload, owner, expected duration, maximum attempts, retryable errors, cancellation behavior, and final result. Keep the payload small and durable: store a file or large document elsewhere and put its identifier in the job.',
+				],
+				bullets: ['A Node.js service and a persistent queue backend', 'A database or durable store for job status', 'A worker process that can be restarted independently', 'A correlation or job ID returned to the API client', 'Metrics and logs that an operator can inspect'],
+			},
+			{
+				heading: 'Create the job at the API boundary',
+				paragraphs: [
+					'The request handler should validate input, authorize the caller, create a job record, enqueue a small payload, and return a reference. For a new job, 202 Accepted communicates that work has been accepted but is not complete; expose a status endpoint such as GET /jobs/:id rather than asking the client to guess when the result is ready.',
+					'Keep the database write and queue publish failure visible. If they cannot be committed atomically with your chosen infrastructure, use an outbox: write the intended job event in the same transaction as the job record, then have a publisher reliably move outbox rows into the queue. Do not return success after only an in-memory enqueue.',
+				],
+				bullets: ['Validate and authorize before enqueueing', 'Generate a stable job ID and an idempotency key for client retries', 'Store queued, running, succeeded, and failed states with timestamps', 'Return 202 plus a status URL, not the eventual result', 'Never put secrets or unnecessary personal data in the queue payload'],
+			},
+			{
+				heading: 'Make the worker safe to retry',
+				paragraphs: [
+					'Assume the queue can deliver a job again. BullMQ describes idempotent jobs as producing the same final state whether they succeed on the first attempt or after a retry, and recommends keeping jobs atomic and simple. Use a unique business key or an idempotency record around each side effect; a worker-level “already processed” check alone can race or fail after the side effect succeeds.',
+					'Split a multi-step workflow when partial progress matters. For example, persist that an export was generated before sending its notification, and make the notification operation use its own idempotency key. If a downstream provider supports idempotency keys, pass the job’s stable operation key rather than creating a new key on every attempt.',
+				],
+				bullets: ['Use database uniqueness for records that must exist once', 'Keep each job focused on one recoverable unit of work', 'Record the attempt and correlation ID with business changes', 'Treat external responses as untrusted and validate them before persistence', 'Design cancellation as a state transition, not a process kill'],
+			},
+			{
+				heading: 'Set retries, backoff, and concurrency deliberately',
+				paragraphs: [
+					'Retry only errors that may recover. A timeout or temporary 503 can be retried; an invalid payload, missing permission, or permanent validation error usually needs a failed state and operator or customer action. BullMQ supports fixed and exponential backoff, plus jitter. A practical starting policy is three attempts with exponential backoff and jitter, then a dead-letter or failed-job path—adjust it to the dependency and the cost of the work.',
+					'Concurrency is a capacity control, not a speed trophy. Set it from downstream limits, memory use, CPU cost, and tenant fairness. If a job can run longer than the queue’s invisibility or lock window, extend that lease with a heartbeat or choose a queue setting that matches the maximum work duration. AWS documents that an SQS message becomes visible again when its visibility timeout expires, and that this can cause another delivery.',
+				],
+				bullets: ['Classify errors as retryable, permanent, or unknown', 'Use exponential backoff with jitter for shared dependencies', 'Cap attempts and total elapsed time', 'Limit concurrency separately for expensive job types', 'Alert when queue age or retry amplification rises'],
+			},
+			{
+				heading: 'Verify with failure-injection tests',
+				paragraphs: [
+					'Test the worker as if it will crash. Enqueue one job, kill the worker during processing, restart it, and verify that the final business state is correct and not duplicated. Run two workers against the same job, make the downstream service return a timeout, and send an invalid payload. Your assertions should cover both the durable job state and the external side effect.',
+					'Also test the client contract: a repeated POST with the same idempotency key should return the original job rather than create another one, GET /jobs/:id should expose safe progress and failure information, and a completed job should remain retrievable for the documented retention period. Logs should connect API request, job ID, attempt, downstream call, and final result without recording secrets.',
+				],
+				bullets: ['Duplicate enqueue produces one logical job', 'A worker crash causes recovery rather than silent loss', 'Two consumers cannot create two business records', 'Permanent errors stop retrying and explain the next action', 'A downstream outage backs off instead of creating a retry storm', 'A dead-lettered job can be inspected and safely replayed'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'A queue is production-ready when an operator can answer what is waiting, what is running, what is failing, and what replaying a message will do. Configure a dead-letter queue or equivalent failed-job set for messages that exceed the retry policy. AWS describes DLQs as a place to isolate unprocessed messages for diagnosis and redrive; retain them long enough for your incident and data-retention processes.',
+					'Keep deployment and operations boring: graceful shutdown stops new work and lets active jobs finish or become retryable, health checks distinguish a live process from a worker that can reach its queue, and dashboards show queue depth, oldest-job age, processing duration, attempts, failures, and dead-letter count. The goal is not exactly-once execution. It is at-least-once delivery with idempotent effects and a recovery path humans understand.',
+				],
+				bullets: ['Queue and job status are durable across process restarts', 'The handler and every important side effect are idempotent', 'Retries have an error policy, backoff, jitter, and a hard limit', 'Lease or visibility timeout exceeds normal work, with heartbeat for outliers', 'Concurrency and per-tenant fairness are measured', 'Dead-lettered jobs have alerts, retention, inspection, and redrive rules', 'Shutdown, deploy, rollback, and replay procedures are documented'],
+			},
+		],
+	},
 ];

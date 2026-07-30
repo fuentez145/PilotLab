@@ -21,12 +21,18 @@ const { bordered = false } = Astro.props;
 
 <style>
 	.footer {
-		display: flex;
-		justify-content: space-between;
+		display: grid;
+		grid-template-columns: minmax(140px, 1fr) auto minmax(140px, 1fr);
 		align-items: center;
-		padding: 26px 48px;
+		gap: 24px;
+		width: 100%;
+		padding: 30px 48px;
 		font-size: 13px;
 		color: var(--muted);
+	}
+	.footer > span:last-child {
+		justify-self: end;
+		white-space: nowrap;
 	}
 	.footer.bordered {
 		border-top: 1.5px solid var(--ink);
@@ -42,7 +48,9 @@ const { bordered = false } = Astro.props;
 	}
 	.flinks {
 		display: flex;
-		gap: 28px;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 12px 28px;
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
@@ -50,9 +58,17 @@ const { bordered = false } = Astro.props;
 	}
 	@media (max-width: 760px) {
 		.footer {
-			padding: 20px;
-			flex-direction: column;
-			gap: 14px;
+			grid-template-columns: 1fr;
+			justify-items: start;
+			gap: 16px;
+			padding: 24px 20px;
+		}
+		.footer > span:last-child {
+			justify-self: start;
+		}
+		.flinks {
+			justify-content: flex-start;
+			gap: 12px 22px;
 		}
 	}
 </style>

@@ -12,11 +12,15 @@ export function getStaticPaths() {
 const { article } = Astro.props;
 const siteUrl = Astro.site!.href.replace(/\/$/, '');
 const articleUrl = `${siteUrl}/insights/${article.slug}`;
+const pageTitle = article.seoTitle || `${article.title} | PilotLab`;
+const description = article.dek.length > 155 ? `${article.dek.slice(0, 152).replace(/\s+\S*$/, '')}…` : article.dek;
+const articleText = [article.intro, ...article.sections.flatMap((section) => [section.heading, ...section.paragraphs, ...(section.bullets || [])])].join(' ');
+const wordCount = articleText.trim().split(/\s+/).length;
 ---
 
 <Layout
-	title={`${article.title} | PilotLab`}
-	description={article.dek}
+	title={pageTitle}
+	description={description}
 	ogType="article"
 	schema={[
 		organizationSchema(siteUrl),
@@ -29,10 +33,14 @@ const articleUrl = `${siteUrl}/insights/${article.slug}`;
 			'@type': 'Article',
 			'@id': `${articleUrl}/#article`,
 			headline: article.title,
-			description: article.dek,
+			description,
+			image: `${siteUrl}/og.png`,
+			articleSection: article.category,
+			keywords: [article.keyword, article.category],
+			wordCount,
 			datePublished: article.published,
-			dateModified: article.updated,
-			mainEntityOfPage: articleUrl,
+			dateModified: article.updated || article.published,
+			mainEntityOfPage: { '@type': 'WebPage', '@id': articleUrl },
 			author: { '@id': `${siteUrl}/#organization` },
 			publisher: { '@id': `${siteUrl}/#organization` },
 		},

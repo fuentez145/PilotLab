@@ -6,6 +6,7 @@ export interface ArticleSource {
 export interface Article {
 	slug: string;
 	title: string;
+	seoTitle?: string;
 	dek: string;
 	published: string;
 	updated: string;
@@ -22,6 +23,7 @@ export const articles: Article[] = [
 	{
 		slug: 'ai-workflow-automation-small-business',
 		title: 'AI Workflow Automation for Small Business: A Practical 2026 Playbook',
+		seoTitle: 'AI Workflow Automation for Small Business | PilotLab',
 		dek: 'A grounded way to find the repetitive work worth automating, connect your tools, and add AI without creating a black box nobody can trust.',
 		published: '2026-07-25',
 		updated: '2026-07-25',
@@ -30,6 +32,10 @@ export const articles: Article[] = [
 		keyword: 'AI workflow automation for small business',
 		intro: 'The useful AI projects are rarely the flashiest ones. They are the small, repeatable workflows that turn a slow handoff into a dependable system: a lead gets qualified, a support request gets routed, or a weekly report arrives already organized. This playbook explains how to start with that work and build toward automation that your team can actually operate.',
 		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+			{ label: 'OpenAI Platform — Structured Outputs', url: 'https://platform.openai.com/docs/guides/structured-outputs' },
+		],
 		sections: [
 			{
 				heading: 'Start with a workflow, not a model',
@@ -124,6 +130,7 @@ export const articles: Article[] = [
 	{
 		slug: 'github-copilot-cloud-agent-linear',
 		title: 'How to Use GitHub Copilot Cloud Agent With Linear Without Losing Review',
+		seoTitle: 'GitHub Copilot Cloud Agent + Linear | PilotLab',
 		dek: 'What GitHub’s July 2026 Linear integration changes for small product teams—and the engineering controls to keep AI-generated work reviewable.',
 		published: '2026-07-25',
 		updated: '2026-07-25',
@@ -174,6 +181,7 @@ export const articles: Article[] = [
 	{
 		slug: 'api-first-architecture-saas-platforms',
 		title: 'API-First Architecture for SaaS Platforms: A Practical Foundation',
+		seoTitle: 'API-First Architecture for SaaS Platforms | PilotLab',
 		dek: 'How to design contracts, ownership, authentication, and developer experience before a growing SaaS product becomes a pile of fragile integrations.',
 		published: '2026-07-25',
 		updated: '2026-07-25',
@@ -224,6 +232,7 @@ export const articles: Article[] = [
 	{
 		slug: 'improve-core-web-vitals-web-application',
 		title: 'How to Improve Core Web Vitals for a Web Application',
+		seoTitle: 'Improve Core Web Vitals for Web Apps | PilotLab',
 		dek: 'A practical debugging guide to LCP, INP, and CLS: measure real users first, find the bottleneck, and fix the work that changes the experience.',
 		published: '2026-07-25',
 		updated: '2026-07-25',
@@ -276,6 +285,7 @@ export const articles: Article[] = [
 	{
 		slug: 'modular-monolith-vs-microservices-growing-saas',
 		title: 'Modular Monolith vs. Microservices for a Growing SaaS',
+		seoTitle: 'Modular Monolith vs Microservices for SaaS | PilotLab',
 		dek: 'How to choose an architecture based on team boundaries, release pain, and operational evidence—without treating microservices as a badge of maturity.',
 		published: '2026-07-25',
 		updated: '2026-07-25',
@@ -284,6 +294,10 @@ export const articles: Article[] = [
 		keyword: 'modular monolith vs microservices for a growing SaaS',
 		intro: 'The modular monolith versus microservices decision is really a question about boundaries and operational capacity. A growing SaaS product needs code that can change safely, teams that can own it, and an architecture that matches the evidence—not the fashion of the moment.',
 		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Microsoft Learn — Monolithic Architecture Style', url: 'https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/monolith' },
+			{ label: 'Microsoft Learn — Microservices Architecture Style', url: 'https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/microservices' },
+		],
 		sections: [
 			{
 				heading: 'A modular monolith is not a shortcut',
@@ -389,6 +403,7 @@ export const articles: Article[] = [
 	{
 		slug: 'design-api-rate-limits-multi-tenant-saas',
 		title: 'How to Design API Rate Limits for a Multi-Tenant SaaS',
+		seoTitle: 'API Rate Limits for Multi-Tenant SaaS | PilotLab',
 		dek: 'A practical guide to choosing rate-limit keys, token-bucket targets, useful 429 responses, and the tests that keep one noisy tenant from hurting everyone else.',
 		published: '2026-07-27',
 		updated: '2026-07-27',
@@ -529,6 +544,7 @@ export const articles: Article[] = [
 	{
 		slug: 'build-reliable-background-job-worker-node',
 		title: 'How to Build a Reliable Background Job Worker in Node.js',
+		seoTitle: 'Reliable Background Job Workers in Node.js | PilotLab',
 		dek: 'A practical queue design for long-running API work: durable jobs, bounded retries, idempotent handlers, visibility timeouts, and an operator-friendly dead-letter path.',
 		published: '2026-07-30',
 		updated: '2026-07-30',
@@ -597,6 +613,7 @@ export const articles: Article[] = [
 	{
 		slug: 'graceful-shutdown-nodejs-api-kubernetes',
 		title: 'How to Implement Graceful Shutdown in a Node.js API',
+		seoTitle: 'Graceful Shutdown in Node.js APIs | PilotLab',
 		dek: 'Stop accepting traffic, finish safe work, close dependencies, and let Kubernetes replace an API instance without dropping requests or corrupting jobs.',
 		published: '2026-07-31',
 		updated: '2026-07-31',

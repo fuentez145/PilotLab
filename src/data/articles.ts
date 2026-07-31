@@ -594,4 +594,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'graceful-shutdown-nodejs-api-kubernetes',
+		title: 'How to Implement Graceful Shutdown in a Node.js API',
+		dek: 'Stop accepting traffic, finish safe work, close dependencies, and let Kubernetes replace an API instance without dropping requests or corrupting jobs.',
+		published: '2026-07-31',
+		updated: '2026-07-31',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to implement graceful shutdown in a Node.js API',
+		intro: 'A deploy should not be a small outage. When a Node.js process receives SIGTERM, it needs to stop taking new work while giving in-flight requests and background operations a bounded chance to finish. This tutorial turns that idea into an application contract that works locally and inside Kubernetes, with explicit trade-offs for long-running requests and telemetry.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — HTTP server.close()', url: 'https://nodejs.org/api/http.html#serverclosecallback' },
+			{ label: 'Node.js Documentation — Process signal events', url: 'https://nodejs.org/api/process.html#signal-events' },
+			{ label: 'Kubernetes Documentation — Container lifecycle hooks', url: 'https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/' },
+			{ label: 'OpenTelemetry Documentation — Node.js getting started', url: 'https://opentelemetry.io/docs/languages/js/getting-started/nodejs/' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define what shutdown must protect',
+				paragraphs: [
+					'You need a Node.js HTTP API, a repeatable start command, a health or readiness endpoint, and a way to stop the process while a request is running. List the work that can be in flight: HTTP requests, database queries, outbound calls, queue consumers, scheduled jobs, and telemetry export. Each item needs an owner, a timeout, and a decision about whether it may finish during termination.',
+					'Do not promise that every operation will complete. A request that can run for ten minutes may exceed the platform grace period. Put long work behind the durable job pattern instead: accept the job, return 202, and let a worker resume it after a restart. Graceful shutdown is a bounded drain, not a request to keep a process alive forever.',
+				],
+				bullets: ['A Node.js server reference you can close explicitly', 'A readiness endpoint that can report draining', 'A database or client with a documented close method', 'A shutdown timeout shorter than the platform’s hard kill window', 'Tests that can hold one request open while the process stops'],
+			},
+			{
+				heading: 'Handle SIGTERM once and enter draining mode',
+				paragraphs: [
+					'Node exposes operating-system signals through process events. Register a SIGTERM handler for the shutdown path and guard it so a second signal cannot start a second cleanup sequence. Set a draining flag immediately. Your readiness endpoint should then return a non-ready response so the orchestrator stops routing new traffic to this instance.',
+					'Keep the handler small and explicit. A useful sequence is: mark the process draining, stop consumers from claiming new jobs, call server.close(), wait for tracked work or the deadline, close application dependencies, flush telemetry, and exit. Do not put a generic process.on(\'exit\') cleanup routine here: Node’s exit event is too late for asynchronous work.',
+				],
+				bullets: ['Use SIGTERM as the normal, graceful path', 'Treat a repeated signal as an accelerated shutdown or a logged no-op', 'Make readiness fail as soon as draining begins', 'Keep SIGKILL as an unavoidable hard-stop fallback', 'Log one shutdown reason and one final outcome'],
+			},
+			{
+				heading: 'Stop new HTTP work before closing dependencies',
+				paragraphs: [
+					'Node’s HTTP server.close() stops new connections and resolves its callback when existing connections finish. Call it before closing the database pool, cache client, or other shared dependencies; otherwise an in-flight request can lose the resource it still needs. If your Node version and traffic pattern require it, separately account for idle keep-alive sockets and connections that never finish.',
+					'Track active work when you need a hard deadline. Increment a counter or register a request at the beginning of application handling, decrement it in a finally block, and resolve a drain promise when the count reaches zero. The server callback and the application counter answer different questions: whether the listener is closed and whether your business work is finished.',
+				],
+				bullets: ['Flip readiness before calling server.close()', 'Call server.close() before closing pools and clients', 'Use request-level timeouts so one stuck request cannot block deploys', 'Avoid force-closing sockets unless the deadline has expired', 'Do not count health probes as business work if they can keep draining open'],
+			},
+			{
+				heading: 'Make the Kubernetes contract match the code',
+				paragraphs: [
+					'Kubernetes starts termination by running the pod’s termination behavior and sending the container process SIGTERM; after the configured termination grace period, it can send SIGKILL. The exact interaction with load balancing and lifecycle hooks is a deployment concern, so test the behavior in the cluster rather than assuming a local Ctrl+C is equivalent.',
+					'Choose a terminationGracePeriodSeconds value that covers normal drain time plus a margin, then set the application shutdown deadline below it. A preStop hook can be useful for platform-specific coordination, but it is not a substitute for handling SIGTERM in the application. Keep the readiness transition in the process so the behavior remains correct when the container is stopped by another supervisor.',
+				],
+				bullets: ['Readiness changes to failure at the start of draining', 'The application deadline is shorter than terminationGracePeriodSeconds', 'Rolling updates allow enough unavailable capacity for the drain', 'Long requests have an explicit timeout or move to a job worker', 'Logs make pod name, signal, deadline, and remaining work visible'],
+			},
+			{
+				heading: 'Close workers and flush telemetry deliberately',
+				paragraphs: [
+					'After the HTTP listener stops accepting work, tell queue consumers to stop claiming new messages. Let the current handler finish if it fits inside the deadline; otherwise make the queue’s lease or visibility timeout allow another delivery. The handler still needs idempotent side effects, because a process can be killed after an external write and before it records completion.',
+					'Observability has its own shutdown path. OpenTelemetry’s Node.js setup uses an SDK that should be shut down when the process terminates so exporters can flush pending data. Await that shutdown, but bound it with the same overall deadline. Telemetry must never keep a production process alive indefinitely or cause a second copy of a shutdown sequence.',
+				],
+				bullets: ['Stop fetching new jobs before waiting for active jobs', 'Use leases and idempotent handlers for work interrupted by SIGTERM', 'Close database pools, cache clients, and queue connections after work drains', 'Await telemetry SDK shutdown with a bounded timeout', 'Prefer a clean non-zero exit when the deadline expires with unfinished work'],
+			},
+			{
+				heading: 'Verify the failure modes before production',
+				paragraphs: [
+					'Add a test route that waits longer than a normal request and a test that starts two requests, sends SIGTERM, and observes the results. Confirm that readiness changes immediately, new business requests stop reaching the instance, the in-flight request either completes within the deadline or fails predictably, and dependencies are closed only after the drain decision.',
+					'Repeat the test during a rolling deployment and during a pod deletion. Inspect the load balancer or service behavior, not only application logs. Also kill the process after the deadline and verify that jobs become visible again, no duplicate business record is created, and the next instance can serve traffic. A graceful-shutdown test that never exercises the deadline is only a happy-path test.',
+				],
+				bullets: ['SIGTERM during an idle process exits cleanly', 'SIGTERM during one request drains that request or applies its timeout', 'A second SIGTERM does not run cleanup twice', 'A new request after draining begins is rejected or routed elsewhere', 'A worker interrupted mid-job is safely retried', 'Telemetry and dependency close errors are logged without hiding the final outcome'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'The implementation is ready when shutdown is observable and bounded. Record shutdown duration, active requests at signal time, forced termination count, interrupted jobs, and dependency-close failures. Review those numbers after deploys: frequent deadline expiry means the timeout, request design, or work placement needs attention.',
+				],
+				bullets: ['SIGTERM handler is registered before the server starts', 'Readiness becomes false before the drain begins', 'server.close() runs before shared dependencies close', 'All long-running work has a deadline and recovery behavior', 'Queue consumers stop claiming work and active jobs remain idempotent', 'Telemetry flush has a deadline and does not block forever', 'Kubernetes grace period exceeds the application shutdown deadline', 'Rolling deploy and pod-delete tests are part of release verification', 'Metrics and logs show graceful versus forced shutdowns'],
+			},
+		],
+	},
 ];

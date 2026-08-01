@@ -686,4 +686,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'http-caching-api-responses-etag-cache-control',
+		title: 'How to Cache API Responses Safely with ETags and Cache-Control',
+		seoTitle: 'Cache API Responses Safely with ETags | PilotLab',
+		dek: 'A practical guide to faster read APIs: classify data, choose freshness rules, add conditional requests, and verify that a cache never crosses a tenant boundary.',
+		published: '2026-08-01',
+		updated: '2026-08-01',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to cache API responses safely with ETags',
+		intro: 'Caching can make a read-heavy API feel faster and reduce repeated work, but an incorrect cache can serve yesterday’s permissions or one customer’s data to another. The safe approach is to make cacheability an explicit property of each endpoint, use validators to avoid transferring unchanged representations, and test the boundary as seriously as the happy path.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9111 — HTTP Caching', url: 'https://www.rfc-editor.org/rfc/rfc9111' },
+			{ label: 'MDN — Cache-Control header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control' },
+			{ label: 'MDN — ETag header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag' },
+			{ label: 'web.dev — HTTP caching', url: 'https://web.dev/articles/http-cache' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: decide what may be reused',
+				paragraphs: [
+					'You need an API endpoint that returns a representation, a way to identify the authenticated user or tenant, and a test client that can inspect response headers. Begin with an endpoint inventory rather than a global middleware rule. For each response, record who may see it, how quickly it must reflect changes, whether it contains secrets or personal data, and which upstream resource determines its version.',
+					'RFC 9111 distinguishes freshness from validation: a fresh stored response can be reused without contacting the origin, while a stale response can be checked against the origin before reuse. That distinction lets you choose a short freshness window for safe public data and still avoid retransmitting an unchanged body.',
+				],
+				bullets: ['Public, identical response for every caller: candidate for shared caching', 'Tenant-scoped response: key it by an authenticated tenant or keep it private', 'User-specific or sensitive response: default to private or no-store until proven safe', 'Frequently changing response: use validation or a short explicit freshness lifetime', 'Mutation endpoint: do not treat POST, PUT, PATCH, or DELETE responses as ordinary read-cache entries'],
+			},
+			{
+				heading: 'Choose Cache-Control deliberately',
+				paragraphs: [
+					'Cache-Control is a policy, not a performance decoration. For a public product catalog that can be five minutes behind, a response might use “public, max-age=60, s-maxage=300”. The browser may reuse it for 60 seconds, while a shared cache may use it for up to 300 seconds. Only use those values when the representation is genuinely safe for every caller.',
+					'For a personalized dashboard, “private, max-age=30” can allow the user’s browser to reuse the response without authorizing a CDN to store it. For a response that must not be retained, use “no-store”. Do not confuse “no-cache” with “do not store”: no-cache permits storage but requires validation before reuse. MDN documents these directives and their separate browser and shared-cache behavior.',
+				],
+				bullets: ['Start with no-store when the data classification is unclear', 'Use private for user- or tenant-specific responses that may live in a browser cache', 'Use public only after proving the response is safe across callers', 'Set max-age from an actual staleness tolerance, not a round number', 'Add Vary only for request fields that genuinely change the representation'],
+			},
+			{
+				heading: 'Add an ETag for conditional requests',
+				paragraphs: [
+					'An ETag identifies a representation version. Generate it from the serialized response or, preferably, from a stable version maintained with the resource. Return it with the response. When a client later sends If-None-Match with that value, compare it before serializing and sending the full body. If it still matches, return 304 Not Modified with no response body and preserve the relevant cache headers.',
+					'This is useful even when max-age is short: a browser or intermediary can revalidate cheaply after the response becomes stale. A weak ETag can describe semantic equivalence when byte-for-byte equality is not required; use a strong validator when consumers rely on exact representation bytes. MDN notes that ETags can also participate in lost-update protection for writes through If-Match, but that is a separate concurrency-control decision.',
+				],
+				bullets: ['Keep the ETag stable while the representation is unchanged', 'Quote the value according to HTTP syntax, for example "v42"', 'Compare If-None-Match before doing expensive response work', 'Return 304 without a body when the validator matches', 'Do not put customer secrets or raw identifiers into the validator'],
+			},
+			{
+				heading: 'Protect the tenant boundary and cache key',
+				paragraphs: [
+					'The most serious cache bug is not a stale badge; it is a valid response delivered to the wrong caller. A cache key must include every input that changes the representation, while authorization must still happen at the application boundary. Never let a user-controlled header such as X-Tenant-ID choose the identity used for authorization or caching.',
+					'If the response varies by content negotiation, language, or an explicitly supported request header, declare that with Vary or make the variant part of the URL. Be cautious with query strings: a CDN may treat them differently from your application, and a cache-busting parameter can create unbounded entries. Normalize only inputs your contract says are equivalent.',
+				],
+				bullets: ['Derive tenant and user identity from verified authentication', 'Authorize before reading a private cache entry', 'Include route, normalized query, tenant scope, and representation variant in the key', 'Never cache an authenticated response publicly by accident', 'Test that tenant A cannot receive tenant B’s body or ETag'],
+			},
+			{
+				heading: 'Verify with headers, a body, and a mutation',
+				paragraphs: [
+					'Test the wire behavior with curl or an equivalent client. Make one request and save the ETag, then send If-None-Match with that value. Expect 304 after the representation is eligible for revalidation. Change the underlying record, repeat the request, and expect a new ETag plus the new body. Also test an expired response through every cache layer you operate; a browser result alone does not prove what a CDN stored.',
+					'Exercise failure cases deliberately. Send two different Accept-Language values if your API supports them, use two tenants with the same route and query, omit authentication, and add an unexpected query parameter. Confirm that authorization errors are not cached for a different caller and that a failed origin request cannot be hidden by an accidental stale policy.',
+				],
+				bullets: ['First response includes the intended Cache-Control and ETag headers', 'Matching If-None-Match returns 304 with no body', 'A changed resource returns 200, a changed ETag, and the new representation', 'Unauthorized and tenant-switched requests never reuse another caller’s response', 'Vary behavior matches the documented representation inputs', 'Cache hit, miss, revalidation, age, and origin status are observable'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'Caching is a consistency trade-off you should be able to explain to a product owner. Longer freshness reduces origin work but extends the time users may see an older value. Short freshness plus ETag validation preserves correctness more closely but still costs a request to revalidate. For data that changes immediately after a mutation, either invalidate the relevant cache entries, version the resource URL, or make the endpoint private and revalidate it according to the product requirement.',
+					'Keep cache policy close to the endpoint contract and review it when fields, permissions, or personalization change. Log the cache decision without logging response bodies or tokens. The goal is not to cache every GET; it is to remove safe repeated work while making an incorrect reuse difficult to introduce and easy to detect.',
+				],
+				bullets: ['Every cached route has an owner and documented staleness tolerance', 'Sensitive responses use private or no-store policy intentionally', 'Shared-cache keys cannot cross tenants, users, languages, or variants', 'ETags change when the representation changes', 'Mutations have an invalidation or versioning plan', '304 responses and cache hits are covered by integration tests', 'Dashboards expose hit ratio, revalidation rate, stale responses, and cache errors', 'A rollback is as simple as changing the response policy to no-store'],
+			},
+		],
+	},
 ];

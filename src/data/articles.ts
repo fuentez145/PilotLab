@@ -755,4 +755,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'nodejs-fetch-timeouts-retries-backoff',
+		title: 'How to Add Timeouts and Retries to Node.js Fetch Calls',
+		seoTitle: 'Node.js Fetch Timeouts and Retries | PilotLab',
+		dek: 'A production-minded pattern for bounding outbound API calls, retrying only recoverable failures, honoring Retry-After, and avoiding retry storms.',
+		published: '2026-08-02',
+		updated: '2026-08-02',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to add timeouts and retries to Node.js fetch calls',
+		intro: 'An outbound API call is part of your request path, so its failure behavior belongs in your design—not in a default client setting. Without a timeout, one slow dependency can occupy a request for too long. Without a retry policy, a temporary failure becomes a user-visible error; with an indiscriminate retry policy, a partial outage becomes a traffic spike. This tutorial builds a small, bounded pattern for Node.js fetch calls and shows where it should stop.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — Fetch and AbortSignal.timeout()', url: 'https://nodejs.org/api/globals.html#static-method-abortsignaltimeoutdelay' },
+			{ label: 'MDN — 503 Service Unavailable', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/503' },
+			{ label: 'IETF RFC 9110 — Retry-After', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-retry-after' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define the dependency contract',
+				paragraphs: [
+					'You need Node.js 18 or newer for the built-in fetch implementation, a downstream API with documented status codes, and a test endpoint that can delay or fail responses. Before writing a helper, record the dependency’s timeout expectation, authentication method, idempotency support, rate limits, and whether it returns Retry-After. A retry wrapper cannot repair an undocumented business contract.',
+					'Separate the caller’s total deadline from an individual attempt timeout. If your incoming request has 1,000 ms left, three 800 ms attempts are not a valid plan. Pass a deadline or remaining budget through the call so the dependency cannot consume time that the caller no longer has.',
+				],
+				bullets: ['Choose a total budget for the user-visible operation', 'Choose a shorter timeout for each outbound attempt', 'Classify methods and operations as safe, unsafe, or explicitly idempotent', 'Decide which status codes and errors are retryable', 'Add a request or trace ID that the downstream service can log'],
+			},
+			{
+				heading: 'Bound every attempt with AbortSignal.timeout()',
+				paragraphs: [
+					'Node documents AbortSignal.timeout(delay) as a signal that aborts after the specified number of milliseconds. Use it with fetch so a connection, response, or body that never completes cannot hold the request forever. Treat an abort as a distinct outcome in logs: it may mean a dependency timeout, a caller cancellation, or your overall deadline.',
+					'Keep the timeout close to the operation’s real budget. A fast metadata lookup and a report-generation endpoint should not inherit the same number automatically. Start with a measured target, leave room for network and parsing work, and make the value configurable rather than scattering magic numbers through route handlers.',
+				],
+				bullets: ['Create a fresh timeout signal for each attempt', 'Abort the response body as well as waiting for headers', 'Do not catch every AbortError and label it a retryable outage', 'Log elapsed time, attempt number, operation name, and a safe dependency name', 'Use an outer deadline to cap the sum of all attempts and backoff'],
+			},
+			{
+				heading: 'Retry only work that can be repeated safely',
+				paragraphs: [
+					'Retries are appropriate for transient failures, not for every non-2xx response. A network reset, timeout, or temporary 503 may recover. A 400 caused by invalid input, a 401 caused by missing credentials, and a 404 for a missing resource generally need a different action. MDN describes 503 as a temporary condition such as maintenance or overload and distinguishes rate limiting as 429, so your policy should treat those signals deliberately rather than lumping all server errors together.',
+					'Be conservative with writes. Retrying GET or another operation documented as safe is simpler. Retrying POST can create two records or trigger two charges if the first attempt reached the server but its response was lost. Only retry an unsafe operation when the downstream contract provides an idempotency key or an equivalent deduplication guarantee, and reuse the same key for every attempt.',
+				],
+				bullets: ['Retry connection failures and timeouts only when the operation is safe', 'Consider 502, 503, and 504 transient, subject to the dependency contract', 'Handle 429 according to its rate-limit policy', 'Do not retry validation, authentication, authorization, or most not-found errors', 'Cap attempts and return a typed failure when the budget is exhausted'],
+			},
+			{
+				heading: 'Use Retry-After, backoff, and jitter together',
+				paragraphs: [
+					'RFC 9110 defines Retry-After as either an HTTP date or a delay in seconds; when sent with 503 it indicates how long the service is expected to be unavailable. Parse the header defensively and cap the resulting wait by your caller deadline. If the header is absent, use bounded exponential backoff rather than retrying immediately.',
+					'A common fallback is base delay multiplied by two for each retry, with a maximum delay and random jitter. Jitter prevents a group of callers that failed together from waking up together. Do not let each library layer add its own retries: one application-level policy around one dependency call is easier to budget and observe than a client, SDK, queue, and route all retrying independently.',
+				],
+				bullets: ['Prefer a valid Retry-After value from the dependency', 'Otherwise use exponential backoff with a hard maximum', 'Add full or bounded random jitter', 'Never sleep beyond the remaining request deadline', 'Expose attempt count and final reason in metrics without logging secrets'],
+			},
+			{
+				heading: 'Verify with a failure matrix',
+				paragraphs: [
+					'Test the helper with a controllable local server before connecting it to a real provider. Return a successful response after one failure, delay beyond the attempt timeout, send 503 with Retry-After, send 429, close the socket without a response, and return a permanent 400. Assert both the number of requests sent and the elapsed time; a test that only checks the final error can hide an unsafe duplicate.',
+					'Then test the business boundary. For a read, confirm that a transient failure can recover without changing the result. For an idempotent write, confirm every attempt carries the same idempotency key. For a non-idempotent write, confirm the policy fails once rather than guessing whether the server committed the first request. Inject a caller cancellation and verify the helper stops instead of starting another attempt.',
+				],
+				bullets: ['One transient 503 recovers within the total budget', 'Retry-After is honored but capped', 'A slow response is aborted at the attempt deadline', 'A permanent 400 makes one request and returns a typed error', 'A retried write reuses its idempotency key', 'Caller cancellation prevents further retries', 'Metrics distinguish timeout, retry, final failure, and success-after-retry'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'Keep the retry policy at the application boundary where you know the operation’s meaning. A generic HTTP helper can classify transport errors and parse headers, but the caller must decide whether repeating the operation is safe. Return an error that preserves the dependency status, attempt count, request ID, and retryability without exposing response bodies that may contain credentials or personal data.',
+					'Watch for retry amplification: rising attempts per request, queue age, dependency latency, and 5xx or 429 rates. If retries increase load without improving successful outcomes, reduce attempts or disable them for that dependency. During a known outage, a fast, clear failure can protect both systems better than a long sequence of doomed attempts.',
+				],
+				bullets: ['Each dependency has one documented timeout and retry owner', 'Total deadline is shorter than the platform or client request deadline', 'Retryable methods and statuses are explicit', 'Unsafe writes require idempotency protection', 'Retry-After parsing is bounded and tested', 'Backoff includes jitter and never exceeds remaining budget', 'Retries are visible in traces, logs, and metrics', 'A feature flag or configuration change can reduce retries during an incident', 'Runbooks explain when to replay, stop, or escalate a failed operation'],
+			},
+		],
+	},
 ];

@@ -823,4 +823,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-cursor-pagination-multi-tenant-api',
+		title: 'How to Design Cursor Pagination for a Multi-Tenant API',
+		seoTitle: 'Cursor Pagination for Multi-Tenant APIs | PilotLab',
+		dek: 'A practical design for stable list endpoints: choose an ordering, encode an opaque cursor, enforce tenant scope, and test inserts, deletes, and concurrent requests.',
+		published: '2026-08-03',
+		updated: '2026-08-03',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to design cursor pagination for a multi-tenant API',
+		intro: 'Pagination looks simple until a customer scrolls through a changing dataset or an integration retries the same page. Offset pagination is easy to explain, but deep offsets become expensive and rows can move between pages as records are inserted or deleted. Cursor pagination gives a client a position in a deliberate ordering; it does not remove consistency decisions, but it makes them explicit. This tutorial shows how to design a tenant-safe list endpoint that remains predictable under ordinary writes.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design#pagination' },
+			{ label: 'IETF RFC 8288 — Web Linking', url: 'https://www.rfc-editor.org/rfc/rfc8288' },
+			{ label: 'Stripe API Reference — Pagination', url: 'https://docs.stripe.com/api/pagination' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define the list contract',
+				paragraphs: [
+					'You need a stable tenant identity from authentication, a database index that matches the list ordering, and a client contract that says what happens when a cursor expires or a record disappears. Start by naming the resource, supported filters, maximum page size, default ordering, and whether the endpoint is a snapshot or a moving window.',
+					'For most operational lists, choose a deterministic descending order such as created_at plus id. The timestamp gives the user a useful order; the unique ID breaks ties. Never order only by a timestamp if two rows can share the same value. Microsoft’s API guidance treats pagination as part of the API design, while Stripe documents cursor-based list parameters such as limit, starting_after, and ending_before as an established client-facing pattern.',
+				],
+				bullets: ['Derive tenant_id from the verified token or session', 'Document a bounded limit, such as 1–100, and enforce it server-side', 'Choose a unique, indexed ordering for every supported filter', 'Decide whether new records may appear while a client is paging', 'Return a stable response shape even when the next page is empty'],
+			},
+			{
+				heading: 'Use a composite key, not a row number',
+				paragraphs: [
+					'A cursor should represent the last ordering key the client received, not “page 4”. For an order of created_at descending and id descending, the next query asks for rows where created_at is earlier than the cursor timestamp, or where the timestamp is equal and id is smaller. Fetch limit plus one row so the server can determine has_more without running a separate count query.',
+					'Create an index that begins with tenant scope and follows the filter and ordering fields. Conceptually, a query for a tenant’s newest records should be able to seek directly into an index shaped like tenant_id, created_at descending, id descending. The exact index depends on the database and filters; verify it with the query planner rather than assuming the ORM generated an efficient plan.',
+				],
+				bullets: ['Use a unique tie-breaker in the ordering', 'Apply tenant scope in the database query, not after fetching rows', 'Fetch one extra row to calculate has_more', 'Avoid SELECT COUNT(*) on every page unless the product truly needs a total', 'Keep cursor ordering and database ordering byte-for-byte consistent'],
+			},
+			{
+				heading: 'Make the cursor opaque and bounded',
+				paragraphs: [
+					'The client should not need to understand database columns. Encode the ordering values and the query version in a signed or authenticated cursor, then use a URL-safe representation. A cursor might carry a version, timestamp, ID, filter hash, and expiry; it should not expose private tenant identifiers or become an unchecked way to alter the query. Base64 alone is encoding, not protection.',
+					'Bind the cursor to the request shape. If a client sends a cursor created for a different filter, sort direction, or resource, reject it with a clear 400 rather than silently producing an unexpected page. Keep cursors short enough for URLs, set a retention or expiry policy, and return a typed error when an old cursor can no longer be decoded or honored.',
+				],
+				bullets: ['Include a cursor version so the format can evolve', 'Authenticate the cursor if its contents influence authorization or query behavior', 'Bind it to resource, filters, direction, and page-size policy', 'Reject malformed, expired, or mismatched cursors', 'Never trust a decoded tenant ID over the authenticated tenant context'],
+			},
+			{
+				heading: 'Expose navigation without coupling clients to storage',
+				paragraphs: [
+					'A minimal JSON response can contain data, has_more, and next_cursor. If the page has no following row, next_cursor should be null. Keep the cursor in the response body because many API clients do not parse headers, but you may also expose navigational links in a Link header. RFC 8288 defines the Link header model and relation types for connecting a response to related resources; a link such as rel="next" can complement, rather than replace, the body field.',
+					'Do not promise that a cursor is a permanent bookmark unless the backend provides snapshot semantics. With a moving dataset, a record inserted above the current position will normally appear on a future fresh traversal, not in a page the client has already passed. A record deleted between requests may simply vanish. Document this behavior and offer a stable export or snapshot job when users need a complete point-in-time report.',
+				],
+				bullets: ['Return data, has_more, and next_cursor with consistent types', 'Use rel="next" only for a URL the client can safely follow', 'Do not expose SQL offsets or internal primary-key assumptions in the public contract', 'Explain whether concurrent inserts, updates, and deletes can change traversal results', 'Use an export or snapshot workflow for audit-grade completeness'],
+			},
+			{
+				heading: 'Protect tenant isolation at every page',
+				paragraphs: [
+					'Tenant isolation must be part of the query and the cursor validation. The request’s authenticated tenant determines the scope; the cursor cannot override it. Apply authorization before the database query, include tenant_id in the WHERE clause and index, and test that a cursor copied from tenant A is invalid or harmless when presented by tenant B.',
+					'Be equally careful with filters, expansions, and related records. A page may contain tenant-owned projects while an expanded owner or billing object belongs to another boundary. Enforce authorization on the expanded data too, and avoid returning a different error shape that lets callers probe whether an inaccessible record exists.',
+				],
+				bullets: ['Scope every page query by verified tenant identity', 'Do not derive authorization from cursor contents or client-supplied headers', 'Apply permission checks to expansions and nested resources', 'Use non-sensitive cursor error messages', 'Add cross-tenant negative tests to the integration suite'],
+			},
+			{
+				heading: 'Verify movement, retries, and performance',
+				paragraphs: [
+					'Test more than the first page. Insert a record between requests, delete the last item from a page, update an item’s ordering field, request a cursor with a different filter, and replay the same request. Assert the API’s documented behavior: no unauthorized rows, no accidental infinite loop, and no duplicate within the traversal under the consistency model you chose.',
+					'Run the endpoint against realistic tenant sizes and inspect database plans for the first page and a deep cursor. Track page latency, rows scanned, empty-page frequency, invalid-cursor responses, and client retries. A cursor design that is logically correct but scans a large tenant’s entire table is not ready for production.',
+				],
+				bullets: ['First page and deep cursor use the intended index', 'Limit values above the maximum are clamped or rejected consistently', 'The same cursor and request shape produce the documented result', 'Concurrent inserts and deletes match the stated consistency behavior', 'Tenant A never sees tenant B data, including through expansions', 'Metrics expose latency, scan work, invalid cursors, and traversal errors'],
+			},
+		],
+	},
 ];

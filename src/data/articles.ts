@@ -891,4 +891,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'version-public-api-without-breaking-clients',
+		title: 'How to Version a Public API Without Breaking Clients',
+		seoTitle: 'Version a Public API Without Breaking Clients | PilotLab',
+		dek: 'A practical compatibility plan for evolving API contracts: classify changes, choose a version boundary, test real consumers, and retire old behavior without surprises.',
+		published: '2026-08-03',
+		updated: '2026-08-03',
+		readTime: '10 min read',
+		category: 'API architecture',
+		keyword: 'how to version a public API without breaking clients',
+		intro: 'API versioning is not a string you add to a URL after a breaking release. It is a compatibility promise to the clients, integrations, mobile apps, and internal teams that depend on your contract. This guide gives small product teams a practical way to decide what is breaking, choose a version boundary, roll out a change, and remove old behavior only when the evidence says it is safe.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OpenAPI Initiative — OpenAPI Specification v3.2.0', url: 'https://spec.openapis.org/oas/latest.html' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Start with a compatibility inventory',
+				paragraphs: [
+					'Before choosing v2, find out what actually consumes the API. List first-party web and mobile clients, partner integrations, scheduled jobs, SDKs, exports, and undocumented scripts. Record the endpoints, fields, status codes, authentication scopes, pagination behavior, and retry assumptions each consumer uses. A version boundary is only useful if you know who needs to cross it.',
+					'Keep a small compatibility matrix in the repository next to the API description. For every planned change, mark whether an old client can continue to parse the response, send the same request, and preserve its intended behavior. Do not rely on “the JSON still looks similar”: changing an enum, error shape, default sort, or permission rule can break a client just as surely as removing a field.',
+				],
+				bullets: ['Name every known consumer and its owner', 'Capture real request and response examples, with secrets removed', 'Record fields clients send, read, ignore, or treat as required', 'Include operational dependencies such as webhooks and retry jobs', 'Turn unknown consumers into an explicit migration risk'],
+			},
+			{
+				heading: 'Classify changes before you version them',
+				paragraphs: [
+					'Use additive changes when the existing contract can safely tolerate them: adding an optional response field, adding a new endpoint, or accepting a new request field that has a documented default. Even additive changes need consumer testing because some clients deserialize strictly or assume an exhaustive enum. Treat the consumer, not the server implementation, as the compatibility boundary.',
+					'Removing or renaming a field, changing its type, making an optional request required, changing the meaning of a status code, narrowing permissions, or changing ordering semantics is a candidate breaking change. HTTP semantics also matter: RFC 9110 identifies safe methods and PUT and DELETE as idempotent, which affects whether a client can recover from a lost response. Do not silently change retry behavior while calling the release compatible.',
+				],
+				bullets: ['Additive: new optional field, endpoint, or documented capability', 'Potentially breaking: new enum value, changed default, or stricter validation', 'Breaking: removed field, changed type, required input, or changed meaning', 'Operationally breaking: new latency, quota, timeout, or retry behavior', 'Security-breaking: a changed authorization rule or data visibility'],
+			},
+			{
+				heading: 'Choose one visible version boundary',
+				paragraphs: [
+					'For a public HTTP API, choose a versioning location that clients can consistently send and operators can consistently observe. A path such as /v1/orders is easy to route, document, log, and explain. A media-type version can keep resource URLs stable but requires every client and tool to negotiate the representation correctly. A query parameter is simple to introduce but easy to omit or cache incorrectly. Pick one primary mechanism instead of making consumers guess across endpoints.',
+					'Keep the version at the contract boundary, not scattered through business logic. Route v1 and v2 into shared domain operations where their behavior is genuinely the same, then put translation code at the edge when request or response shapes differ. This avoids duplicating the core business rules while making incompatibilities visible. Microsoft’s API guidance emphasizes resource-oriented URIs, standard HTTP methods, stateless requests, and loose coupling; versioning should preserve those properties rather than turn every version into a separate product.',
+				],
+				bullets: ['Document the default behavior explicitly; never make it implicit', 'Keep one canonical OpenAPI description per supported contract', 'Translate at the edge when versions share business behavior', 'Do not let v1 and v2 write conflicting meanings to the same resource', 'Include version in metrics, traces, logs, and support diagnostics'],
+			},
+			{
+				heading: 'Make the contract executable in CI',
+				paragraphs: [
+					'An OpenAPI document is useful only when it is treated as a release artifact. The specification defines a standard, language-agnostic description for HTTP APIs, including paths, operations, parameters, request bodies, responses, and reusable schemas. Keep the document under review, validate it on every change, and generate or check examples from the same source rather than maintaining a second unofficial reference.',
+					'Add three layers of verification. First, validate the document itself so malformed paths, references, and schemas fail before deployment. Second, run contract tests against the live or staged server to check status codes, headers, and bodies for representative requests. Third, run consumer tests for the clients most likely to break: strict deserializers, mobile versions that cannot update quickly, and partner integrations with narrow retry logic. A green unit suite is not evidence that an old client can still talk to the new contract.',
+				],
+				bullets: ['Fail CI when the API description is invalid or incomplete', 'Compare the proposed contract with the last released contract', 'Test required fields, enums, errors, pagination, and authorization', 'Run old-client fixtures against the new server before rollout', 'Publish examples that can be copied into a real request'],
+			},
+			{
+				heading: 'Deprecate with an observable migration path',
+				paragraphs: [
+					'When a replacement is ready, publish the migration guide before turning off the old contract. Show the old request, the new request, field mappings, changed errors, authentication differences, and a rollback or fallback plan. Give each consumer an owner and a date for testing. If you do not know which clients are still active, add usage telemetry before setting a removal date.',
+					'Use response headers, documentation, dashboards, and direct communication to make deprecation visible. A warning without a route, owner, or deadline is easy to ignore. Measure requests by version and consumer identity, but do not expose tokens or personal data in logs. Keep the old path read-only or limited only if that is an intentional, documented product decision; changing semantics during deprecation creates a second migration problem.',
+				],
+				bullets: ['Publish a migration guide with before-and-after examples', 'Track traffic by version, endpoint, consumer, and error class', 'Notify known owners and give them a test environment', 'Set a removal date only after usage and support impact are understood', 'Keep rollback possible while the new contract proves itself'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'The safest API migrations are boring: one explicit contract, a small compatibility layer, tests that represent real consumers, and dashboards that show whether traffic moved. Avoid releasing v2 because the codebase feels untidy. Release it when the old contract prevents a necessary change or when a security, data, or product requirement cannot be met compatibly.',
+					'Watch for the failure modes that version numbers do not solve. A v2 endpoint can still leak tenant data, return inconsistent errors, or make non-idempotent writes unsafe to retry. A client can send the right version and still use an expired token. Keep authorization, validation, rate limits, idempotency, and observability as shared platform controls, then test them separately for every public contract.',
+				],
+				bullets: ['The compatibility matrix has owners and current examples', 'Breaking changes have an explicit version and migration guide', 'Each supported version has a validated contract in CI', 'Old-client and consumer tests run before production rollout', 'Version and consumer usage are observable without sensitive logs', 'Deprecation has a communication plan, deadline, and rollback path', 'Authorization, retries, rate limits, and idempotency are tested per version', 'The removal decision is based on measured usage, not hope'],
+			},
+		],
+	},
 ];

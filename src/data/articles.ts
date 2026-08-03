@@ -959,4 +959,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-http-api-error-responses-problem-details',
+		title: 'How to Design HTTP API Error Responses with Problem Details',
+		seoTitle: 'Design HTTP API Error Responses with Problem Details | PilotLab',
+		dek: 'A practical contract for errors that clients can handle: choose the right status, return application/problem+json, expose validation fields safely, and test the failure paths.',
+		published: '2026-08-03',
+		updated: '2026-08-03',
+		readTime: '9 min read',
+		category: 'API engineering',
+		keyword: 'how to design HTTP API error responses',
+		intro: 'An API error is part of the client contract, not an implementation detail to hide behind a generic 500. When every endpoint returns a different shape, clients have to parse strings, support teams lose useful context, and retries become guesswork. This tutorial shows how to create a small, consistent error contract using HTTP status semantics and the Problem Details format, while keeping sensitive implementation details out of the response.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9457 — Problem Details for HTTP APIs', url: 'https://www.rfc-editor.org/rfc/rfc9457' },
+			{ label: 'MDN — HTTP response status codes', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: map failures before formats',
+				paragraphs: [
+					'You need an HTTP API, a client or integration you can test, and a way to inspect status codes, headers, and response bodies. Start by listing the failures your API can produce: malformed JSON, invalid fields, missing authentication, insufficient permission, missing resources, conflicts, rate limits, dependency failures, and unexpected server errors.',
+					'Choose the HTTP status from the meaning of the failure, not from the exception class. A 400 means the request cannot be processed as sent; 401 means the request lacks valid authentication; 403 means the server understood the request but refuses it; 404 means the target resource cannot be found; 409 is useful when the request conflicts with the current resource state; and 429 signals that the client should slow down. Keep this mapping documented and consistent across routes.',
+				],
+				bullets: ['List the status code, retryability, and next action for each failure class', 'Separate client-correctable errors from server and dependency failures', 'Decide which fields are safe for an unauthenticated caller to see', 'Give operators a correlation or instance ID without exposing internals', 'Treat validation, authorization, and rate-limit behavior as public contract'],
+			},
+			{
+				heading: 'Use one machine-readable envelope',
+				paragraphs: [
+					'RFC 9457 defines Problem Details as a common format for machine-readable HTTP error information. Its JSON representation uses the application/problem+json media type and has standard members including type, title, status, detail, and instance. The type identifies the kind of problem; detail describes this occurrence; instance can identify the specific occurrence for support or forensics.',
+					'A representative validation response could be a 422 with a type such as https://api.example.com/problems/validation-error, a stable title, a short detail, an instance or request ID, and an errors extension containing safe field locations. Keep extensions focused on information clients can act on. Do not make clients scrape the human wording in title or detail to decide what to do.',
+				],
+				bullets: ['Set Content-Type to application/problem+json for the JSON problem representation', 'Use an absolute, stable type URI you control when possible', 'Keep title stable for the problem type and detail specific to the occurrence', 'Use extension fields for structured validation or business context', 'Document the problem types and examples alongside the endpoint contract'],
+			},
+			{
+				heading: 'Keep errors useful without leaking secrets',
+				paragraphs: [
+					'An error response should help the caller recover, but it is still public output. Never return stack traces, SQL fragments, access tokens, internal hostnames, provider credentials, or another tenant’s identifiers. Log the detailed exception on the server with an access-controlled correlation ID, then return a stable problem type and a support-safe instance value.',
+					'Be careful with authorization and resource existence. Depending on your security model, returning 404 for an inaccessible resource can avoid revealing whether it exists; returning 403 may be more useful when the caller is allowed to know the resource but lacks an action. Choose deliberately and apply the same rule to every route. The client should not be able to infer private data by comparing error wording, timing, or shape.',
+				],
+				bullets: ['Expose field names and safe constraints, not raw validator internals', 'Generate request or instance IDs at the edge and include them in logs', 'Redact credentials, personal data, and provider response bodies', 'Return the same error shape for every failure path in the API', 'Make error messages localization-friendly if clients display them directly'],
+			},
+			{
+				heading: 'Make retry behavior explicit',
+				paragraphs: [
+					'Clients need to know whether trying again can help. Validation, authentication, authorization, and most not-found errors should not be retried unchanged. A 429 should normally include Retry-After when the server can calculate a meaningful delay. A 503 can indicate temporary unavailability, but a client still needs a bounded retry policy and the operation must be safe to repeat.',
+					'Do not encode retryability only in detail text. Add a documented problem type or extension such as retryable: true only if your team can keep that field accurate, and keep idempotency separate from availability. A temporary timeout on a POST does not prove that the server did nothing; retries for unsafe writes need an idempotency key or an equivalent deduplication contract.',
+				],
+				bullets: ['Use 429 and Retry-After for rate limiting, with a bounded client backoff', 'Use 503 for temporary service unavailability when that is the actual condition', 'Do not retry malformed requests or failed authorization without a change', 'Require idempotency protection before retrying an unsafe write', 'Record status, problem type, attempt count, and request ID in client telemetry'],
+			},
+			{
+				heading: 'Test the contract at the wire boundary',
+				paragraphs: [
+					'Unit tests for an exception mapper are not enough. Send malformed input, an invalid field, a missing token, a forbidden resource, a missing record, a conflicting update, a rate-limited request, and a simulated dependency failure. Assert the status, Content-Type, required problem members, stable type, and absence of sensitive fields. Test both JSON clients and clients that send an Accept header without application/problem+json.',
+					'Add contract fixtures for the clients that matter most. A client should branch on status and type, not on a sentence in detail. Verify that a request ID in the response can locate the server log, that errors from one tenant do not mention another, and that the server’s unexpected exception path still returns a safe generic problem rather than a framework default page.',
+				],
+				bullets: ['Every documented failure returns the intended status and media type', 'Validation errors identify safe fields without exposing request secrets', 'Problem type remains stable when human wording changes', '429 and temporary failures expose the documented retry signal', 'Unexpected failures have an operator correlation path and a safe body', 'Contract tests run against the deployed or staged HTTP boundary'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'Problem Details is a useful common envelope, not a reason to put every internal fact in JSON. Some responses are still resource representations, and a status code may be enough for a simple case. Use the format where clients need structured error information, then keep the type vocabulary small enough that teams can support it.',
+					'Centralize the mapping at an application boundary, but let domain code provide typed causes and safe metadata. Monitor problem types by route, tenant-safe consumer identity, status, and dependency. When a new failure appears in production, add a test and decide whether it is a new public type or an existing category. Consistency is earned by closing that feedback loop, not by adding a middleware package and moving on.',
+				],
+				bullets: ['Error types and status mappings have an owner', 'The API contract documents examples and client next actions', 'Problem responses never contain secrets, stack traces, or cross-tenant data', 'Retry and idempotency rules are explicit for every retriable operation', 'Correlation IDs connect client reports to server logs and traces', 'Contract and failure-injection tests run in CI and before releases', 'Dashboards show new problem types, spikes, and dependency-related failures', 'A generic fallback remains safe when an unknown exception escapes'],
+			},
+		],
+	},
 ];

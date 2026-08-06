@@ -1027,4 +1027,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'implement-transactional-outbox-nodejs-api',
+		title: 'How to Implement a Transactional Outbox in a Node.js API',
+		seoTitle: 'Transactional Outbox in a Node.js API | PilotLab',
+		dek: 'Keep database state and published events aligned with one transaction, then deliver from a durable outbox without pretending delivery is exactly once.',
+		published: '2026-08-06',
+		updated: '2026-08-06',
+		readTime: '11 min read',
+		category: 'API architecture',
+		keyword: 'how to implement a transactional outbox in a Node.js API',
+		intro: 'A common integration bug starts with a reasonable-looking sequence: update the order, call the message broker, and return success. If the database commit succeeds but the publish fails, downstream systems never hear about the order. If the publish succeeds and the database rolls back, they hear about state that does not exist. A transactional outbox closes that dual-write gap by recording the intended event in the same database transaction as the business change, then publishing it asynchronously with explicit duplicate and recovery handling.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'AWS Prescriptive Guidance — Transactional outbox pattern', url: 'https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html' },
+			{ label: 'microservices.io — Transactional outbox', url: 'https://microservices.io/patterns/data/transactional-outbox.html' },
+			{ label: 'PostgreSQL Documentation — Transactions', url: 'https://www.postgresql.org/docs/current/tutorial-transactions.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: identify the dual write',
+				paragraphs: [
+					'This pattern is useful when one user action must change your database and notify another component: creating an order and emitting order.created, changing a subscription and enqueueing billing work, or updating a record and invalidating a downstream projection. You need a transactional database, a broker or queue, a worker process, and an event contract that a consumer can validate. If the side effect can stay inside the same database, an outbox may be unnecessary complexity.',
+					'Draw the current sequence and mark every failure window. A broker call inside the request can make latency and availability depend on the broker. A database commit followed by a publish can lose the event. A publish followed by a rollback can create a false event. The outbox makes the database transaction the source of truth for what should eventually be delivered; it does not make the broker transactional with your database.',
+				],
+				bullets: ['A database transaction that owns the business write', 'An outbox table in the same database', 'A publisher that can retry safely', 'A consumer contract with event IDs and schema versions', 'Metrics, logs, and an operator path for stuck rows'],
+			},
+			{
+				heading: 'Write the business row and event together',
+				paragraphs: [
+					'Create an outbox row in the same transaction as the business change. A useful row has an immutable event ID, event type, schema version, aggregate or resource ID, tenant scope where relevant, serialized payload, creation time, attempt count, and delivery state. Keep the payload sufficient for the consumer to act, but avoid copying secrets or data that the consumer does not need.',
+					'In a Node.js service, the application-level shape might be createOrder(input), then insert an outbox record for OrderCreated, then commit. The route returns success only after that transaction commits. PostgreSQL describes a transaction as an all-or-nothing unit: if a later statement fails, earlier changes can be rolled back. That atomic boundary is the core guarantee the pattern relies on.',
+				],
+				bullets: ['Use one database transaction for the domain write and outbox insert', 'Generate the event ID before persistence and keep it stable across retries', 'Store aggregate ID and sequence or created_at for ordering decisions', 'Add an index for undelivered rows, such as (status, created_at)', 'Do not call the broker from inside the database transaction'],
+			},
+			{
+				heading: 'Publish with a poller or change-data mechanism',
+				paragraphs: [
+					'A separate publisher finds pending rows, claims a bounded batch, sends each event to the broker, and records the delivery result. A simple polling worker is often the easiest first implementation: it uses ordinary database queries, is easy to run locally, and makes the retry state visible. AWS documents a variation that scans an outbox, sends events to SQS, and deletes rows after a successful response.',
+					'Claiming needs concurrency control. Use a lease or a database mechanism such as row locking with skip-locked behavior so two workers do not actively process the same row at once. This reduces contention but does not eliminate duplicates: a worker can publish successfully and crash before marking the row delivered. Keep the row or a delivery record long enough to support diagnosis and replay, rather than deleting the evidence immediately.',
+				],
+				bullets: ['Fetch a small, ordered batch rather than scanning the whole table', 'Claim rows with a lease that expires if a worker dies', 'Publish outside the database transaction', 'Mark delivered only after the broker acknowledges the event', 'Use backoff for transient failures and isolate permanently invalid events'],
+			},
+			{
+				heading: 'Design consumers for at-least-once delivery',
+				paragraphs: [
+					'The publisher has an unavoidable crash window between sending an event and recording that it was sent. Therefore the practical contract is at-least-once delivery: a consumer may receive the same event more than once. AWS explicitly calls out duplicate messages as an issue and recommends tracking processed messages so consumers are idempotent. Put the event ID in the message envelope and make the consumer’s business effect safe to repeat.',
+					'For a projection, upsert by aggregate ID and ignore an event ID already applied. For a notification or external write, use a unique delivery key or the provider’s idempotency key. If event ordering matters, include an aggregate sequence and reject or defer a gap; do not assume broker arrival order is enough. A duplicate-safe consumer is more valuable than a publisher that claims exactly-once semantics it cannot prove.',
+				],
+				bullets: ['Persist processed event IDs where the side effect is persisted', 'Make repeated delivery produce the same final state', 'Validate event type and schema version before acting', 'Use aggregate sequence numbers when order is a business requirement', 'Send poison messages to a reviewed dead-letter path'],
+			},
+			{
+				heading: 'Test the crash windows and operational limits',
+				paragraphs: [
+					'Test the boundary, not just the happy path. Force the business transaction to fail and confirm that neither the business row nor its outbox event remains. Commit the transaction, stop the API before publishing, restart the worker, and confirm the event is eventually delivered. Publish an event and interrupt the worker before its status update; the next attempt should create no duplicate business effect at the consumer.',
+					'Measure the outbox as a queue. Alert on oldest pending age, pending count, publish failure rate, retry count, lease expirations, consumer lag, and dead-letter count. Put limits on payload size and retention. If the outbox grows without bound, the problem may be a broker outage, a poison event, insufficient worker capacity, or a transaction path that creates events faster than the system can deliver them.',
+				],
+				bullets: ['Rollback leaves no orphan event', 'A committed transaction survives an API or worker restart', 'A publisher crash after broker acknowledgement causes one logical consumer effect', 'Two workers cannot corrupt delivery state', 'A malformed event is quarantined with a replay decision', 'Tenant and authorization boundaries hold during replay'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'The transactional outbox trades a small amount of database storage and worker complexity for a much clearer reliability boundary. It is not a replacement for a broker, a schema registry, or a distributed transaction in every situation. It also does not guarantee immediate delivery: consumers observe eventual consistency, and a long broker outage creates a growing backlog. Document that delay as part of the product behavior.',
+					'Choose polling when simplicity and operational visibility matter; consider a database change-data mechanism when polling load or delivery latency justifies its infrastructure. Whichever route you choose, keep the event contract versioned, preserve enough delivery history to investigate incidents, and give operators a safe replay tool. Never replay a financial or destructive event without consumer idempotency and an explicit scope.',
+				],
+				bullets: ['Business write and outbox insert share one committed transaction', 'Outbox rows have stable IDs, schema versions, ownership, and retention', 'Publisher claims work safely and retries with bounded backoff', 'Consumers are idempotent and validate event envelopes', 'Ordering requirements are explicit per aggregate, not assumed globally', 'Backlog, age, retries, failures, and replay actions are observable', 'Dead-letter and replay procedures protect tenants and destructive actions', 'The team knows when an outbox is simpler than a distributed transaction'],
+			},
+		],
+	},
 ];

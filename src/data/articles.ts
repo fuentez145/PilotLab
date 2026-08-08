@@ -1163,4 +1163,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'add-openapi-contract-tests-nodejs-api',
+		title: 'How to Add OpenAPI Contract Tests to a Node.js API',
+		seoTitle: 'OpenAPI Contract Tests for Node.js APIs | PilotLab',
+		dek: 'A practical test boundary for API teams: validate the OpenAPI document, exercise the running server, and catch status, schema, and compatibility drift before release.',
+		published: '2026-08-08',
+		updated: '2026-08-08',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to add OpenAPI contract tests to a Node.js API',
+		intro: 'A unit-tested route can still violate the API contract that clients depend on. It may return the wrong status, omit a required field, accept an undocumented parameter, or drift from the OpenAPI document that partners use to integrate. This tutorial shows a small product team how to turn an OpenAPI description into a release check for a Node.js API, while keeping the specification honest and the tests useful rather than noisy.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OpenAPI Initiative — OpenAPI Specification v3.2.0', url: 'https://spec.openapis.org/oas/latest.html' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+			{ label: 'Node.js Documentation — Test runner', url: 'https://nodejs.org/api/test.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: choose the contract boundary',
+				paragraphs: [
+					'You need a Node.js HTTP API that can run in a test environment, an OpenAPI document checked into the project, and a client capable of sending requests and inspecting status codes, headers, and JSON bodies. The examples assume the document describes the public HTTP behavior; it should not be a private sketch that only backend developers read.',
+					'First list the routes and consumers that matter. A contract test is most valuable where a mobile client, partner integration, generated SDK, or separate frontend depends on exact behavior. Include authentication, pagination, error responses, and content types—not only the successful 200 example. Microsoft’s API guidance treats these interface choices as part of API design, and the OpenAPI specification provides the machine-readable description that tools and reviewers can share.',
+				],
+				bullets: ['A running API with a deterministic test database or fixtures', 'An OpenAPI file with paths, parameters, request bodies, and responses', 'A Node.js test command that can start or target the test server', 'Representative authenticated and unauthenticated requests', 'A decision about which compatibility changes should fail CI'],
+			},
+			{
+				heading: 'Make the OpenAPI document executable',
+				paragraphs: [
+					'Treat the OpenAPI document as a versioned release artifact. Every operation should identify its parameters, request body, success response, content type, and meaningful failure responses. Reusable schemas should describe required fields, formats, enums, nullable behavior, and additional properties according to the behavior your clients can rely on. An incomplete document produces incomplete tests.',
+					'Add a first CI step that parses and validates the document before any server test runs. Then compare the proposed document with the last released document using a compatibility-aware checker or a reviewed diff. A syntax check catches malformed YAML; it does not tell you that removing a response field breaks a consumer. Require review for removed fields, narrowed enums, new required inputs, changed status meanings, or authentication changes.',
+				],
+				bullets: ['Keep the document beside the API code and review it like source', 'Use one canonical schema for a response instead of copied examples that drift', 'Give error responses stable types or schemas where clients act on them', 'Fail early on invalid references, duplicate operations, or missing response definitions', 'Review additive changes too because strict clients may reject unknown fields or enum values'],
+			},
+			{
+				heading: 'Exercise the deployed shape, not just functions',
+				paragraphs: [
+					'A contract test should send an HTTP request to the running application and validate the response against the operation described in OpenAPI. This catches wiring problems that a controller unit test misses: route registration, middleware order, serialization, headers, authentication, and the actual status code. Keep the server and test database isolated so the test can run repeatedly without depending on a developer’s machine.',
+					'Use Node’s built-in test runner or the test framework already used by the service; the important property is that the test is a normal repeatable command. Start the API on an ephemeral port, wait for its readiness check, run the requests, and close the server in teardown. If the project uses a separate process, make startup failure fail the test rather than turning every request into a misleading connection error.',
+				],
+				bullets: ['Run the test against the real HTTP listener and serialization path', 'Use fixtures that cover a valid resource, a missing resource, and invalid input', 'Assert Content-Type as well as the JSON shape', 'Send authentication and tenant context exactly as a real client does', 'Make readiness, startup, and teardown part of the test lifecycle'],
+			},
+			{
+				heading: 'Test the failure contract deliberately',
+				paragraphs: [
+					'Most integration breakage hides in failure behavior. For each important operation, test malformed JSON, missing required fields, invalid enum values, missing authentication, insufficient permission, a missing resource, a conflict, and a rate-limit or dependency failure where those cases exist. Assert the documented status, media type, required problem fields, and safe error shape. Do not accept a framework-generated HTML error page just because the happy path validates.',
+					'Keep assertions specific to the public contract. Check that a problem type is stable and that a request or instance ID is present if the API promises one, but avoid asserting the exact human detail sentence. This leaves room to improve wording without breaking clients. Also assert that stack traces, tokens, raw provider payloads, and cross-tenant identifiers are absent from responses and logs used by the test.',
+				],
+				bullets: ['A 400 or 422 identifies safe validation fields without echoing secrets', '401 and 403 behavior matches the authentication contract', '404 and 409 are distinguishable where client recovery differs', '429 includes the documented retry signal when applicable', 'Unexpected failures return the safe generic schema, not a debug page', 'Tenant A cannot infer or receive tenant B data through an error'],
+			},
+			{
+				heading: 'Cover compatibility and real consumers',
+				paragraphs: [
+					'Validation against today’s OpenAPI file only proves that the server agrees with itself. Add fixtures for the clients you cannot silently update: an older mobile app, a partner payload, a generated SDK, or a scheduled integration. Run those requests against the staged server and check both parsing and behavior. A response can remain valid JSON while changing an enum, default sort, pagination cursor, or permission rule in a way that breaks the consumer.',
+					'Keep the test set narrow enough to run on every pull request, then add broader staging checks for representative workflows. When a contract change is intentional, update the document, migration note, consumer fixture, and release review together. Never weaken a failing test merely to make a rollout green; first decide whether the contract or the implementation is wrong.',
+				],
+				bullets: ['Run old-client fixtures before merging a breaking-looking change', 'Test generated clients or partner examples where they exist', 'Include pagination, authentication scopes, and retry assumptions', 'Record the endpoint and contract version in test output', 'Review compatibility failures with the consumer owner, not only the API owner'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'Contract tests are a boundary control, not proof that the business behavior is correct. They will not tell you whether a price calculation is right, whether a query is fast under a large tenant, or whether an authorization policy is appropriate unless those expectations are represented in the contract and fixtures. Pair them with domain tests, security tests, load checks, and observability.',
+					'Keep failures diagnosable. Print the operation, request ID, status, content type, and a redacted response excerpt; never dump authorization headers or customer payloads into CI logs. Review test data when schemas change, pin the OpenAPI toolchain, and run the same contract checks against the artifact you intend to deploy. The payoff is a smaller gap between what the team documents, what the server does, and what clients are allowed to assume.',
+				],
+				bullets: ['The OpenAPI document validates before server tests run', 'Contract tests execute through the real HTTP boundary', 'Success, validation, auth, not-found, conflict, and dependency paths are covered', 'Schemas and media types are checked without overfitting wording', 'Compatibility checks compare against the last released contract', 'Fixtures include tenant isolation and sensitive-field assertions', 'CI logs are useful but redact secrets and personal data', 'The test command runs against the staged release artifact before production', 'Failures have an owner and a documented contract-change process'],
+			},
+		],
+	},
 ];

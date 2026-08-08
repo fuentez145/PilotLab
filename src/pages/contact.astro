@@ -86,7 +86,12 @@ const topics = ['Web app', 'E-commerce', 'Design system', 'Something else'];
 				<p>Thanks — we'll be in touch within one business day. Talk soon.</p>
 				<button type="button" id="reset-btn" class="again">Send another</button>
 			</div>
-			<form id="contact-form" data-rv novalidate>
+			<form id="contact-form" action="https://formsubmit.co/hotaroofficial@gmail.com" method="POST" data-rv>
+				<input type="hidden" name="_subject" value="New PilotLab contact message" />
+				<input type="hidden" name="_template" value="table" />
+				<input type="hidden" name="_captcha" value="true" />
+				<input type="hidden" name="_next" value="https://pilotlab.cloud/contact/?sent=1" />
+				<input type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true" class="honeypot" />
 				<div class="field">
 					<label class="label" for="f-name">Your name</label>
 					<input id="f-name" name="name" type="text" placeholder="Jane Appleseed" autocomplete="name" />
@@ -100,16 +105,17 @@ const topics = ['Web app', 'E-commerce', 'Design system', 'Something else'];
 					<div class="chips">
 						{
 							topics.map((t, i) => (
-								<button type="button" class:list={['chip', { sel: i === 0 }]}>
+								<button type="button" class:list={['chip', { sel: i === 0 }]} data-topic={t}>
 									{t}
 								</button>
 							))
 						}
 					</div>
+					<input type="hidden" id="f-topic" name="topic" value={topics[0]} />
 				</div>
 				<div class="field">
 					<label class="label" for="f-msg">About the project</label>
-					<textarea id="f-msg" name="message" rows="4" placeholder="Timeline, goals, anything useful…"></textarea>
+					<textarea id="f-msg" name="message" rows="4" placeholder="Timeline, goals, anything useful…" required></textarea>
 				</div>
 				<button type="submit" class="send">Send it →</button>
 				<p class="reassure">
@@ -126,25 +132,30 @@ const topics = ['Web app', 'E-commerce', 'Design system', 'Something else'];
 </Layout>
 
 <script>
-	// Topic chips: single select.
+	// FormSubmit handles delivery. The query-string state is shown when the
+	// visitor returns from a successful submission.
 	const chips = document.querySelectorAll<HTMLButtonElement>('.chip');
+	const topicInput = document.getElementById('f-topic') as HTMLInputElement;
+	const form = document.getElementById('contact-form') as HTMLFormElement;
+	const done = document.getElementById('contact-done') as HTMLElement;
+	const params = new URLSearchParams(window.location.search);
+
 	chips.forEach((chip) => {
 		chip.addEventListener('click', () => {
 			chips.forEach((c) => c.classList.remove('sel'));
 			chip.classList.add('sel');
+			topicInput.value = chip.dataset.topic ?? '';
 		});
 	});
 
-	// Submit swaps to the confirmation state; "Send another" resets the form.
-	const form = document.getElementById('contact-form') as HTMLFormElement;
-	const done = document.getElementById('contact-done') as HTMLElement;
-	form.addEventListener('submit', (e) => {
-		e.preventDefault();
+	if (params.get('sent') === '1') {
 		form.hidden = true;
 		done.hidden = false;
-	});
+	}
+
 	document.getElementById('reset-btn')?.addEventListener('click', () => {
 		form.reset();
+		topicInput.value = 'Web app';
 		chips.forEach((c, i) => c.classList.toggle('sel', i === 0));
 		done.hidden = true;
 		form.hidden = false;
@@ -426,6 +437,14 @@ const topics = ['Web app', 'E-commerce', 'Design system', 'Something else'];
 	.again:hover {
 		background: var(--ink);
 		color: #fff;
+	}
+
+	.honeypot {
+		position: absolute;
+		left: -10000px;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
 	}
 
 	@media (max-width: 900px) {

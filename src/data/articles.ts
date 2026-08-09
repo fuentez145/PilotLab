@@ -1231,4 +1231,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-reliable-outbound-api-client-nodejs',
+		title: 'How to Build a Reliable Outbound API Client in Node.js',
+		seoTitle: 'Reliable Outbound API Client in Node.js | PilotLab',
+		dek: 'A practical design for timeouts, bounded retries, Retry-After, jitter, and idempotency when your service depends on another API.',
+		published: '2026-08-09',
+		updated: '2026-08-09',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to build a reliable outbound API client in Node.js',
+		intro: 'An outbound API call is a dependency boundary, not just a fetch statement. The remote service can be slow, rate-limit you, return a transient 503, or accept a request just before your process times out. This tutorial gives a small product team a provider-neutral design for a Node.js client that fails predictably, retries only when it is safe, and leaves enough evidence to debug the next incident.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — Fetch', url: 'https://nodejs.org/api/globals.html#fetch' },
+			{ label: 'IETF RFC 9110 — Retry-After', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-retry-after' },
+			{ label: 'MDN — 429 Too Many Requests', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429' },
+			{ label: 'AWS Builders’ Library — Timeouts, retries, and backoff with jitter', url: 'https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define what “safe to retry” means',
+				paragraphs: [
+					'You need a Node.js service, a client or SDK boundary for the remote API, a repeatable test command, and a way to inspect structured logs. Start by listing each operation’s method, timeout budget, side effects, and recovery path. A GET that reads a record is not the same retry decision as a POST that creates a shipment or charges a card.',
+					'Classify failures before choosing a policy. A connection reset, timeout, 502, 503, or 504 may be transient; a 400, 401, 403, or validation 422 usually needs a code or credential change, not another attempt. A 429 is a deliberate request to slow down: MDN notes that the response may include Retry-After, so the client should use that signal rather than immediately multiplying the load.',
+				],
+				bullets: ['Set a total request deadline, not only a socket timeout', 'Mark operations as read-only, idempotent, or non-idempotent', 'Define the maximum attempts and maximum retry time', 'Decide what the caller sees when the dependency stays unavailable', 'Keep credentials, base URLs, and limits in configuration'],
+			},
+			{
+				heading: 'Put a deadline around every request',
+				paragraphs: [
+					'Node’s built-in fetch gives you a standard HTTP client surface, but it does not know your business deadline. Pass an AbortSignal with a timeout for each attempt and also track a deadline for the whole operation. Without both, three individually “reasonable” retries can consume the entire time budget and leave your own request waiting until its caller gives up.',
+					'Choose the budget from the user journey and dependency behavior. A synchronous page request may need to fail fast and enqueue work; a background reconciliation job can wait longer. Keep the timeout shorter than the upstream load balancer or platform timeout so your service can return a useful error instead of being killed mid-request.',
+				],
+				bullets: ['Create one absolute deadline at the start of the operation', 'Derive each attempt timeout from the remaining budget', 'Abort the request and release response bodies on timeout', 'Include elapsed time and attempt number in internal logs', 'Never log authorization headers or full customer payloads'],
+			},
+			{
+				heading: 'Retry with bounded exponential backoff and jitter',
+				paragraphs: [
+					'For a retryable failure, wait before trying again. A common schedule grows the delay after each attempt, then caps it: the first retry might wait a short interval, later retries longer, but never beyond the operation’s remaining deadline. Add random jitter to the selected delay. If many workers fail at the same time and all sleep for exactly the same duration, they can wake together and create another spike.',
+					'Keep the policy in one reusable helper rather than duplicating it in every integration. The helper should receive the HTTP method, status or error class, attempt number, remaining deadline, and whether the operation is safe to repeat. It should return either a bounded delay or a final decision. Do not retry a non-idempotent operation merely because the TCP connection failed: the remote server may have completed it before the failure reached you.',
+				],
+				bullets: ['Retry only transient errors and explicitly retryable statuses', 'Use exponential growth with a hard cap and random jitter', 'Stop when the absolute deadline or attempt limit is reached', 'Honor a valid Retry-After value when it fits the remaining budget', 'Prefer an idempotency key for provider-supported write operations'],
+			},
+			{
+				heading: 'Treat Retry-After and response bodies carefully',
+				paragraphs: [
+					'RFC 9110 defines Retry-After as either a delay in seconds or an HTTP date. Parse both forms, reject negative or unreasonable values, and clamp the result to your own maximum wait. A remote server’s suggestion is useful, but it cannot override the deadline your caller gave you. If there is no usable header, fall back to your local backoff policy.',
+					'Read enough of the response to release the connection, but do not assume every error body is safe to expose to users. Convert provider errors into your application’s stable error categories and retain a redacted provider code for operators. On a 429 or 503, the final error should tell the caller whether to retry later, enqueue the work, or ask a person to intervene.',
+				],
+				bullets: ['Accept delta-seconds and HTTP-date forms', 'Clamp remote delays to the operation deadline and policy maximum', 'Preserve provider request IDs for support investigations', 'Map upstream failures to stable internal error types', 'Never return raw upstream bodies, tokens, or stack traces'],
+			},
+			{
+				heading: 'Make writes idempotent and observable',
+				paragraphs: [
+					'Timeouts create ambiguity: you may not know whether the remote write happened. For a provider that supports idempotency keys, generate one stable key for the logical operation and reuse it across retries; do not generate a new key for each attempt. If the provider has no such feature, use a client-side operation record, a unique business constraint, or a reconciliation step before issuing the write again.',
+					'Log one logical operation with child attempt records. Capture the dependency name, route, status or error class, duration, attempt count, retry delay, outcome, and provider request ID. Add metrics for timeout rate, retry rate, exhausted deadlines, 429s, and latency by dependency. These signals tell you whether the client is recovering from normal blips or hiding a dependency that is consistently unhealthy.',
+				],
+			},
+			{
+				heading: 'Verify the failure modes before production',
+				paragraphs: [
+					'Use a local stub server or provider sandbox that can deliberately delay responses, close a connection, return 429 with Retry-After, return 500 and 503, and succeed only on a later attempt. Assert the number of requests, total elapsed time, parsed delay, final error category, and idempotency key. A test that only checks the eventual 200 misses the behavior that protects your system under pressure.',
+					'Run the same checks under concurrency. Confirm that jitter produces a spread of retry times, that one slow dependency does not occupy every request slot, and that cancellation stops future attempts. Then test a completed write followed by a simulated timeout: the client must reconcile or safely reuse the key rather than create a duplicate. In production, pair the client with a circuit breaker or queue when repeated dependency failure would otherwise consume all your workers.',
+				],
+				bullets: ['Timeout: no unbounded wait and no retry after the deadline', '429: Retry-After is honored within the local cap', '503: bounded retries with jitter and a useful final error', 'Non-idempotent write: no blind retry without a safe key or reconciliation', 'Cancellation: queued delays and in-flight work stop promptly', 'Metrics: attempts, exhausted deadlines, and dependency latency are visible'],
+			},
+		],
+	},
 ];

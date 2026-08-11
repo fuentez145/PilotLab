@@ -1299,4 +1299,70 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-kubernetes-health-endpoints-nodejs-api',
+		title: 'How to Design Kubernetes Health Endpoints for a Node.js API',
+		seoTitle: 'Kubernetes Health Endpoints for Node.js APIs | PilotLab',
+		dek: 'Separate startup, liveness, and readiness so Kubernetes can restart broken processes without routing traffic to an API that is not ready.',
+		published: '2026-08-11',
+		updated: '2026-08-11',
+		readTime: '9 min read',
+		category: 'Platform engineering',
+		keyword: 'how to design Kubernetes health endpoints for a Node.js API',
+		intro: 'A health endpoint is a control signal, not a nicer version of “the process is running.” Kubernetes uses probe results to decide whether to restart a container or stop sending traffic to it. If one endpoint tries to answer both questions, a temporary dependency outage can trigger a restart storm—or a live but unusable instance can keep receiving requests. This tutorial gives each signal a narrow contract and shows how to test it.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Kubernetes — Liveness, Readiness, and Startup Probes', url: 'https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/' },
+			{ label: 'Kubernetes — Configure probes', url: 'https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/' },
+			{ label: 'Kubernetes — Pod termination lifecycle', url: 'https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination' },
+			{ label: 'MDN — 503 Service Unavailable', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/503' },
+		],
+		sections: [
+			{
+				heading: 'Start with three different questions',
+				paragraphs: [
+					'Startup asks: “Has this process finished initialization?” Liveness asks: “Is the process sufficiently broken that restarting it may recover the service?” Readiness asks: “Should this instance receive traffic right now?” Kubernetes documents these as separate probe types, and the distinction is the most important design decision.',
+					'Keep the handlers cheap, local, and deterministic. They should not perform a full customer request, scan a large table, or call five remote services. A probe runs repeatedly and its failure can affect every replica, so the check itself must not become a new outage dependency.',
+				],
+				bullets: ['Startup: initialization and configuration are complete', 'Liveness: the event loop and essential process are making progress', 'Readiness: this replica can safely accept the traffic you route to it'],
+			},
+			{
+				heading: 'Implement small Node.js endpoints',
+				paragraphs: [
+					'Expose separate paths such as /health/startup, /health/live, and /health/ready. The live handler should return 200 from memory when the process is running. The startup handler should remain unsuccessful until required initialization has completed. The readiness handler should return unsuccessful while the server is draining, configuration is invalid, or a dependency that the API cannot operate without is unavailable.',
+					'Use the status code as the contract: a successful probe returns 2xx, while a failed HTTP probe returns a non-2xx or times out. Return a small JSON body for humans and logs, but do not include secrets, connection strings, stack traces, or detailed dependency errors. During planned draining, 503 is appropriate for a temporary inability to accept requests; MDN notes that Retry-After can communicate an estimated recovery time when one is known.',
+				],
+			},
+			{
+				heading: 'Choose dependencies carefully',
+				paragraphs: [
+					'Readiness may check a dependency when serving without it would produce guaranteed failures—for example, a database required by every request. Put a short timeout on that check and distinguish “not ready” from “process must restart.” A database being briefly unavailable usually belongs in readiness, not liveness; restarting every replica does not repair a shared database and can remove the last healthy capacity.',
+					'Liveness should detect an unrecoverable local condition such as a deadlock or an event loop that cannot make progress. Do not make liveness depend on third-party APIs, DNS, or a remote cache unless the process truly cannot recover without a restart. Kubernetes cautions that incorrect liveness probes can cause cascading failures by restarting containers under load.',
+				],
+				bullets: ['Local process failure: liveness failure may be justified', 'Required shared dependency outage: usually readiness failure', 'Optional analytics or cache outage: keep the instance ready and degrade', 'Slow dependency check: fail the check quickly rather than consuming probe workers'],
+			},
+			{
+				heading: 'Configure startup before liveness',
+				paragraphs: [
+					'If initialization takes time, use a startupProbe instead of inflating liveness initialDelaySeconds. Kubernetes does not run liveness or readiness probes until the startup probe succeeds, which gives a slow application a defined warm-up budget without weakening the steady-state liveness policy. Set failureThreshold multiplied by periodSeconds to cover the measured worst-case startup plus margin, then keep the liveness interval focused on real runtime failure.',
+					'Configure readiness independently. It should succeed only after the app can serve its real contract, not merely after the HTTP listener binds. If readiness later fails, Kubernetes stops sending normal Service traffic to the Pod; that makes readiness the right place for temporary overload, dependency recovery, and deliberate drain state.',
+				],
+			},
+			{
+				heading: 'Verify the signals under failure',
+				paragraphs: [
+					'Test the endpoint behavior without Kubernetes first: start the API before initialization completes, stop the required dependency, force the application into draining mode, and simulate a local deadlock in a test build. Assert both status codes and response time. Then apply the Deployment and inspect Pod events, EndpointSlices, restart counts, and rollout behavior rather than relying only on curl from inside the container.',
+					'Run a load test while toggling readiness. Confirm that a readiness failure removes traffic without restarting the process, while a liveness failure eventually creates a replacement. Test startup with a deliberately slow boot. Finally, test a dependency outage across all replicas: the intended result is controlled unavailability and a useful alert, not a synchronized restart loop.',
+				],
+				bullets: ['Startup fails until initialization is genuinely complete', 'Liveness remains local and does not flap during a dependency outage', 'Readiness turns false during drain and recovers after a transient fault', 'Probe handlers meet their timeout under normal load', 'Events, restart counts, and traffic endpoints explain the result', 'Alerts distinguish not-ready capacity from crashed containers'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'Health checks are part of the API’s operational contract. Version their behavior with the service, document which dependencies are required for readiness, and review probe changes like code that can restart production. A green liveness probe should never be interpreted as proof that the customer-facing workflow is healthy.',
+				],
+				bullets: ['Startup, liveness, and readiness have separate routes and meanings', 'Probe handlers are cheap, bounded, and safe to expose internally', 'Liveness does not restart every replica for a shared dependency outage', 'Readiness reflects drain, overload, and required dependency state', 'startupProbe protects slow initialization without weakening liveness', 'Deployment tests inspect traffic routing and restart behavior', 'Dashboards show ready replicas, probe failures, restarts, and probe latency'],
+			},
+		],
+	},
 ];

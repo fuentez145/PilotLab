@@ -1365,4 +1365,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'rotate-api-keys-without-downtime',
+		title: 'How to Rotate API Keys Without Downtime',
+		seoTitle: 'Rotate API Keys Without Downtime | PilotLab',
+		dek: 'A provider-neutral rollout for replacing API credentials safely: overlap keys, deploy consumers, revoke deliberately, and verify the cutover.',
+		published: '2026-08-14',
+		updated: '2026-08-14',
+		readTime: '10 min read',
+		category: 'API security',
+		keyword: 'how to rotate API keys without downtime',
+		intro: 'An API-key rotation fails when a team treats it as a single replacement instead of a migration. If the old key is revoked before every consumer has switched, a deployment becomes an outage. If the old key stays valid forever, the exposure window never closes. This tutorial shows a safer overlap-and-revoke sequence that works for service-to-service integrations, third-party providers, and APIs your team operates.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OWASP — Secrets Management Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html' },
+			{ label: 'Google Cloud — Best practices for managing API keys', url: 'https://cloud.google.com/docs/authentication/api-keys-best-practices' },
+			{ label: 'Microsoft Learn — Subscriptions in Azure API Management', url: 'https://learn.microsoft.com/en-us/azure/api-management/api-management-subscriptions' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: map the credential before changing it',
+				paragraphs: [
+					'You need an inventory of the key’s consumers, a secret store or deployment mechanism, access to the provider’s revoke or regenerate operation, and metrics that can show accepted requests by credential or consumer. Start by naming the owner, provider, scope, environment, last rotation, and emergency contact. A key that nobody can identify is not ready for a safe rotation.',
+					'Classify the credential before choosing the runbook. A server-side API key can usually be overlapped and swapped. A browser-exposed key is not a secret in the same sense and needs provider restrictions, referrer or application limits, and a migration away from privileged access. Google warns against putting keys in client code or repositories, and recommends restrictions, monitoring, deletion of unused keys, and more secure alternatives where available.',
+				],
+				bullets: ['List every service, job, local tool, and partner using the key', 'Confirm whether the provider supports two active keys or an equivalent overlap window', 'Record permissions, allowed APIs, environments, and rate limits', 'Verify that application logs, URLs, crash reports, and CI output do not expose the value', 'Define the rollback and emergency-revocation owner before the change'],
+			},
+			{
+				heading: 'Create the replacement before deploying it',
+				paragraphs: [
+					'Generate the new key with the narrowest scope that can perform the required work. Store it in the same managed secret system as the current key, but under a distinct version or name. Do not paste it into source control, a ticket, a chat message, or a command line that will be retained in shell history. OWASP recommends centralizing secrets, applying least privilege, automating rotation, and auditing access rather than relying on manual handling.',
+					'If the provider exposes primary and secondary credentials, use them as a deliberate migration pair. Microsoft documents this pattern for Azure API Management: an application can switch from one key to the other, then regenerate the unused key, and repeat the process. If the provider supports only one active key, create a second credential or temporary scoped identity if possible; otherwise schedule a maintenance window and make the outage risk explicit rather than pretending overlap exists.',
+				],
+				bullets: ['Give the replacement a distinct identifier and creation timestamp', 'Match or reduce the old key’s permissions; do not widen access during rotation', 'Set the secret value through deployment configuration, not application source', 'Record who or what created it without recording the secret itself', 'Keep the old key active while consumers are being migrated'],
+			},
+			{
+				heading: 'Deploy consumers with an explicit cutover',
+				paragraphs: [
+					'Change the consumer to read the new secret version, then deploy it through the normal path. Prefer an application configuration name such as PROVIDER_API_KEY rather than baking a provider-specific key into multiple modules. If you need an instant rollback, keep the previous value available as a separately controlled fallback for the overlap period, but do not silently try both keys forever: that can hide a bad deployment and complicate attribution.',
+					'For several consumers, migrate one low-risk workload first. Verify successful calls, latency, provider-side usage, and application error rates before moving scheduled jobs or customer-facing traffic. A rolling deployment can briefly contain old and new processes, so the provider must accept both keys until the rollout and any process restarts have completed.',
+				],
+				bullets: ['Deploy the replacement to one canary consumer first', 'Track traffic by consumer and credential label where the provider allows it', 'Restart long-lived workers that load secrets only at process startup', 'Confirm every environment was updated, including staging and scheduled jobs', 'Keep the rollback switch documented and time-bounded'],
+			},
+			{
+				heading: 'Verify the cutover before revoking the old key',
+				paragraphs: [
+					'Do not infer completion from a green deployment. Make a verification matrix: call the provider from each consumer, exercise a representative read and write, run one scheduled path, and inspect failures for the old credential. If the provider cannot distinguish keys in usage data, add a safe application-side credential label to request metrics or logs. Never log the raw value; a label such as api-key-2026-08 is enough.',
+					'Check the negative path before revocation by temporarily denying the old key in a non-production environment or using a provider test credential. Then confirm that an invalid or revoked key produces the documented authentication failure and that your service does not retry it indefinitely. A credential problem is not a transient network failure; retries can create noise and delay the real fix.',
+				],
+				bullets: ['All known consumers succeed with the replacement', 'No new production requests are attributed to the old credential', 'A restart does not revert to a baked-in or empty default', 'Authentication failures alert without exposing the secret', 'Health checks and smoke tests cover the provider dependency', 'The old key has a clear expiry or revocation time'],
+			},
+			{
+				heading: 'Revoke, then remove the migration scaffolding',
+				paragraphs: [
+					'After the overlap window has covered deployments, retries, worker restarts, and the longest scheduled interval, revoke or regenerate the old key. Delete unused credentials where the provider supports it; Google explicitly recommends retaining only actively used keys. Record the revocation event, the replacement identifier, affected consumers, and verification evidence. This is the point where a routine rotation becomes auditable rather than tribal knowledge.',
+					'If old-key traffic appears after revocation, do not immediately restore it without identifying the consumer. Restore only under the incident owner’s decision, then fix the stale deployment, forgotten script, or copied secret. Keep dual-key support as a temporary migration mechanism, not a permanent authentication strategy. For future rotations, automate creation, secret publication, canary verification, expiry reminders, and revocation as far as the provider permits.',
+				],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'Rotation is safe when the sequence is reversible until verification is complete and irreversible only after ownership is clear. The overlap window protects availability; least privilege and restrictions reduce the impact of a leak; monitoring tells you whether a consumer was missed. No generic runbook can choose the right interval for every system, so base it on deployment time, job frequency, cache or process lifetime, and the provider’s key behavior.',
+					'Treat a suspected compromise differently from routine hygiene. For an active leak, prioritize containment: restrict or revoke the exposed credential, inspect usage, replace dependent secrets, and preserve evidence. Do not wait for the normal overlap period if an attacker may be using the key. For ordinary rotation, keep the process calm and observable so an emergency procedure is not the only time the team handles credentials.',
+				],
+				bullets: ['Key scope and provider restrictions are reviewed before creation', 'Secrets are stored and injected through an access-controlled mechanism', 'Old and new credentials can overlap only for a documented window', 'Canary, restart, scheduled-job, and negative-authentication tests pass', 'Raw keys never appear in source, URLs, logs, tickets, or CI artifacts', 'Usage and authentication failures are monitored by consumer', 'Revocation and replacement events are recorded without secret values', 'Compromise response can revoke quickly and supports forensic review', 'The next rotation can be automated instead of repeated manually'],
+			},
+		],
+	},
 ];

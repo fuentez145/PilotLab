@@ -1432,4 +1432,74 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'limit-nodejs-api-request-body-size',
+		title: 'How to Limit Request Body Size in a Node.js API',
+		seoTitle: 'Limit Request Body Size in Node.js APIs | PilotLab',
+		dek: 'A practical boundary for safer APIs: reject oversized requests early, handle chunked bodies, keep proxy limits aligned, and test the 413 path without buffering untrusted input.',
+		published: '2026-08-14',
+		updated: '2026-08-14',
+		readTime: '10 min read',
+		category: 'API security',
+		keyword: 'how to limit request body size in a Node.js API',
+		intro: 'A request body is an input and a resource claim at the same time. If an endpoint parses unlimited JSON or accepts an unbounded upload, one client can consume memory, CPU, connection time, storage, or downstream API capacity. This tutorial shows how to enforce a body-size policy at the edge of a Node.js API, why checking Content-Length alone is insufficient, and how to make the rejection path clear for clients and operators.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — HTTP message headers', url: 'https://nodejs.org/api/http.html#messageheaders' },
+			{ label: 'Node.js Documentation — Streams', url: 'https://nodejs.org/api/stream.html' },
+			{ label: 'MDN — 413 Content Too Large', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/413' },
+			{ label: 'MDN — Content-Length header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Length' },
+			{ label: 'OWASP — API Security Project', url: 'https://owasp.org/www-project-api-security/' },
+		],
+		sections: [
+			{
+				heading: 'Start with an endpoint-specific budget',
+				paragraphs: [
+					'Do not choose one global number and apply it to every route. A JSON command, a CSV import, and a media upload have different parsing and storage costs. Define the maximum accepted body in bytes, the allowed content types, whether compression is supported, and what the client should do when the limit is exceeded. MDN defines 413 Content Too Large for a request larger than the server is willing or able to process; “Payload Too Large” is the older phrase still seen in some systems.',
+					'Write the limit into the API contract and deployment configuration. Keep the application limit at or below the limit enforced by your reverse proxy or gateway, otherwise clients may receive a proxy-generated response with a different shape. If a route genuinely accepts large files, stream them to dedicated object storage or an upload service instead of turning the API process into a file buffer.',
+				],
+				bullets: ['Set separate limits for JSON commands, imports, and uploads', 'Count bytes, not JavaScript string characters', 'Reject unsupported Content-Type values before parsing', 'Document the limit and the 413 response shape', 'Keep proxy, gateway, web server, and application limits aligned'],
+			},
+			{
+				heading: 'Use Content-Length as an early check, not the whole defense',
+				paragraphs: [
+					'Content-Length reports the message-body size when the sender knows it in advance. That makes it a useful cheap rejection: parse it as a bounded non-negative integer and return 413 before allocating a body buffer when it is above the route limit. Never trust it as proof that the body is safe, because HTTP can carry a body without a usable Content-Length, including streamed or chunked requests.',
+					'For a body arriving as a Node.js readable stream, count each data chunk as it arrives. Stop accumulating as soon as the running byte count exceeds the limit, destroy or otherwise close the request according to your server framework’s documented behavior, and send one response if the connection is still writable. The important ordering is limit check, bounded accumulation, then parsing—not parse first and measure later.',
+				],
+				bullets: ['Read the header before creating a body buffer', 'Reject invalid or ambiguous length metadata safely', 'Count Buffer.byteLength or raw chunk lengths while streaming', 'Use a hard maximum for every route that reads a body', 'Stop reading and release resources after an over-limit decision'],
+			},
+			{
+				heading: 'Keep parsing and validation behind the byte guard',
+				paragraphs: [
+					'Once the byte limit has passed, validate the media type and character or encoding assumptions before deserializing. For JSON, collect only up to the configured limit, decode once, then parse and validate against the request schema. A size check does not make the resulting object safe: deeply nested data, huge arrays, expensive validation, and repeated fields can still consume disproportionate resources.',
+					'Use a parser limit that is owned by the route rather than a hidden default in a shared helper. If the application uses a framework body parser, configure its limit and still verify how it behaves for chunked requests, malformed JSON, and parser errors. For multipart uploads, a multipart-aware streaming parser must enforce both the complete request limit and per-file or per-field limits; a JSON parser limit does not protect that path.',
+				],
+				bullets: ['Validate Content-Type before selecting a parser', 'Bound array lengths, string lengths, nesting, and field counts', 'Keep malformed JSON separate from oversized input', 'Use streaming multipart handling for files', 'Never log the rejected body or echo it in the error response'],
+			},
+			{
+				heading: 'Return a useful 413 without creating a retry storm',
+				paragraphs: [
+					'Return 413 when the request itself is too large, with a stable machine-readable error type and the maximum accepted size if that information is safe to publish. The client should change the request, not retry the same bytes. A 413 is different from 429 rate limiting and 503 temporary unavailability; do not attach a generic retry policy that sends the oversized request again.',
+					'If the request may have reached a proxy first, make the application and proxy error responses close enough that clients can recover consistently. Include a request or correlation ID, but do not include internal parser messages, stack traces, uploaded content, or infrastructure details. Record the route, configured limit, observed size category, and outcome in metrics rather than logging sensitive payloads.',
+				],
+				bullets: ['Use HTTP 413 Content Too Large for an over-limit body', 'Set application/problem+json if that is your API error contract', 'Tell clients the next action: reduce, split, or use an upload flow', 'Do not recommend retrying the unchanged request', 'Track rejected bytes by route and authenticated tenant where appropriate'],
+			},
+			{
+				heading: 'Test headers, streams, parsers, and the proxy boundary',
+				paragraphs: [
+					'Test the running HTTP server, not only the body-reading helper. Send a body just below the limit with Content-Length and expect the normal response. Send one just above it and expect 413 without the handler or database being called. Then send the same content in chunks without relying on Content-Length and confirm that the server stops at the byte boundary rather than buffering the entire request.',
+					'Exercise malformed lengths, invalid JSON, an unsupported media type, a slow body, a compressed body if compression is accepted, and multipart files larger than their per-file limit. Run the requests through the real reverse proxy or gateway as well as directly against Node. A passing unit test cannot prove that the outer layer has not silently rejected smaller requests or allowed a larger one through a different route.',
+				],
+				bullets: ['Below-limit JSON reaches the handler and validates normally', 'Over-limit Content-Length is rejected before business work', 'Chunked input is rejected when accumulated bytes cross the limit', 'Malformed JSON returns the documented parse error, not a 500', 'Unsupported media types return the documented 415 path', 'Proxy and application limits produce an observable, compatible contract', 'Slow and concurrent oversized requests do not exhaust memory or connections'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'Request limits reduce one class of unrestricted resource consumption; they are not a complete abuse-control system. OWASP describes API resource consumption as involving bandwidth, CPU, memory, storage, and paid downstream actions. Pair body limits with authentication, rate limits, request and connection timeouts, concurrency controls, quotas, and per-operation budgets. A small body can still trigger an expensive query or an external API call.',
+					'The right limit is a product decision as well as a security decision. Make ordinary valid requests fit comfortably, give imports and files an intentional asynchronous path, and review limits when schemas or customer workflows change. Alert on rejected-request spikes, memory pressure, parser latency, connection duration, and proxy-versus-application status differences. The goal is not to reject more traffic; it is to make resource use bounded and failures predictable.',
+				],
+				bullets: ['Every body-reading route has an explicit byte limit and owner', 'The limit is enforced before parsing and for streamed or chunked input', 'JSON, multipart, and compressed requests have separate reviewed policies', '413 responses are stable, safe, and not retried unchanged', 'Proxy and application limits are tested together', 'Metrics expose over-limit requests, parser cost, memory, and connection duration', 'Large-file and bulk-import workflows use streaming or asynchronous processing', 'The runbook explains how to change a limit without causing an outage'],
+			},
+		],
+	},
 ];

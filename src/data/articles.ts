@@ -1502,4 +1502,81 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'stream-large-json-export-nodejs-api',
+		title: 'How to Stream a Large JSON Export from a Node.js API',
+		seoTitle: 'Stream Large JSON Exports from a Node.js API | PilotLab',
+		dek: 'A practical design for exporting many records without building the whole response in memory: stream rows, respect backpressure, handle disconnects, and test the limits.',
+		published: '2026-08-14',
+		updated: '2026-08-14',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to stream large JSON exports from a Node.js API',
+		intro: 'A “download all” endpoint often starts as JSON.stringify(await loadEverything()) and works until a customer requests a large tenant export. Then memory grows with the result set, time-to-first-byte is delayed, and one slow client can keep expensive work alive. Streaming improves the shape of the problem, but it is not magic: you still need bounded queries, backpressure, authorization, cancellation, and a decision about whether an asynchronous export is the better product. This tutorial shows a provider-neutral pattern for a Node.js API.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — Streams', url: 'https://nodejs.org/api/stream.html' },
+			{ label: 'Node.js Documentation — HTTP response.write()', url: 'https://nodejs.org/api/http.html#responsewritechunk-encoding-callback' },
+			{ label: 'MDN — Transfer-Encoding', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Transfer-Encoding' },
+			{ label: 'IETF RFC 9112 — HTTP/1.1 message framing', url: 'https://www.rfc-editor.org/rfc/rfc9112.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: decide whether streaming is the right product',
+				paragraphs: [
+					'Use a streamed response when the caller needs one download, the result can be produced incrementally, and the request can finish within your platform’s connection and execution limits. You need a Node.js HTTP server, a data access layer that can iterate in bounded batches or a cursor, an authorization check that runs before rows are read, and a client that can consume a response progressively.',
+					'Streaming is a transport strategy, not a replacement for a durable export job. If the query takes minutes, the result must be retried, the user needs progress, or the file should remain available after disconnect, create a background job and write to object storage instead. A live stream has no convenient rewind once bytes have been sent and headers cannot be changed after the first chunk.',
+				],
+				bullets: ['Define the maximum rows, bytes, and connection duration', 'Authorize the tenant and export filters before opening the cursor', 'Choose JSON, newline-delimited JSON, or CSV based on client needs', 'Decide how a disconnected client cancels database work', 'Provide an asynchronous export path for long or repeatable jobs'],
+			},
+			{
+				heading: 'Keep the response valid while sending it incrementally',
+				paragraphs: [
+					'For a JSON array, write the opening bracket, serialize one record at a time, place commas between records, and write the closing bracket only after the iterator completes. Never concatenate untrusted fields into JSON by hand; serialize each record with JSON.stringify so quotes, newlines, and Unicode are encoded correctly. Set Content-Type to application/json and a download-friendly Content-Disposition before the first write.',
+					'You may not know Content-Length in advance. In HTTP/1.1, an unknown-length response can be framed with chunked transfer, while HTTP/2 has different framing and does not use the Transfer-Encoding header. Let Node and the proxy choose the protocol framing; do not manually add Transfer-Encoding: chunked as if it were an application format. If the consumer can accept it, newline-delimited JSON is simpler to recover and process record by record, but it is not one JSON array and requires a line-oriented parser.',
+				],
+				bullets: ['Write headers before the first body chunk', 'Use JSON.stringify for every record', 'Track whether a comma is needed instead of trimming a trailing comma', 'Do not set Content-Length unless the complete byte length is known', 'Keep the media type and download filename stable in the API contract'],
+			},
+			{
+				heading: 'Respect backpressure instead of writing into memory',
+				paragraphs: [
+					'Node’s writable stream APIs use a boolean return value to signal whether more data should be written immediately. When response.write() returns false, pause the producer and wait for the response’s drain event before continuing. Ignoring that signal lets the application queue chunks faster than the network can deliver them, which moves the memory problem from your array into the writable buffer.',
+					'Use an async generator or a small Readable transform so the database iterator advances only when the response is ready for more data. Keep each chunk bounded: a row containing a large text field can still be expensive, and a batch that serializes thousands of rows at once defeats the point. Measure the row and chunk sizes you actually see rather than assuming a record is small.',
+				],
+				bullets: ['Treat false from response.write() as “stop producing for now”', 'Resume on drain, not with an unbounded setImmediate loop', 'Read database rows in bounded batches or cursor pages', 'Avoid loading the complete result set or a complete batch into an array', 'Track bytes written, rows written, and time spent waiting for drain'],
+			},
+			{
+				heading: 'Handle errors and disconnects before they become leaks',
+				paragraphs: [
+					'Once the first byte is sent, a later database error cannot be converted into a normal JSON error response without corrupting the document. Decide what the client should do with a truncated stream, log the failure with a request ID, and close or destroy the response according to your server framework’s documented behavior. If an export must be resumable or explain a failure to a user, an asynchronous file is usually a better contract.',
+					'Listen for the request or response closing and abort the database iterator, query, or transaction. A browser cancel, proxy timeout, and mobile network change are normal events, not exceptional reasons to keep scanning rows. Also impose a server-side deadline and maximum output size. Authorization is checked once at the boundary, but every query must still include the authenticated tenant scope; never use a client-provided tenant ID from the export URL as the security boundary.',
+				],
+				bullets: ['Stop database work when the client disconnects', 'Use an AbortSignal or equivalent cancellation path where the driver supports it', 'Log truncated exports distinctly from completed exports', 'Never send a second JSON error after the body has started', 'Enforce tenant scope, row limits, byte limits, and a total deadline'],
+			},
+			{
+				heading: 'Choose the data access pattern carefully',
+				paragraphs: [
+					'A streaming HTTP response does not make an unbounded database query safe. Prefer a deterministic ordering and a cursor or keyset condition so the database can progress through an index. Select only the fields the export needs, avoid per-row queries, and decide how concurrent inserts or updates affect the result. If the export must represent one point in time, use a database snapshot or materialize the rows into a job; a moving live query can legitimately produce a moving view.',
+					'Keep the transaction lifetime in mind. Holding a snapshot open while a slow client downloads can retain database resources or interfere with cleanup. For large exports, materializing a safe result to object storage in a worker often gives better isolation than keeping an API request and database transaction open. For smaller exports, bounded cursor reads plus a short connection deadline can be a reasonable compromise.',
+				],
+				bullets: ['Use an index that matches tenant, filters, and ordering', 'Avoid N+1 lookups while serializing rows', 'Document whether the export is a snapshot or a moving result', 'Do not hold scarce database resources open for an unbounded client', 'Move long-running or repeatable exports to a durable job and file'],
+			},
+			{
+				heading: 'Verify the wire behavior and production limits',
+				paragraphs: [
+					'Test the running HTTP endpoint, not only the serializer. Request zero rows, one row, several rows containing quotes and Unicode, and a result that exceeds one internal chunk. Parse the complete response as JSON and assert the exact row count, headers, and tenant scope. Use a slow-reading client to force backpressure, and compare process memory while exporting a small and a much larger dataset; memory should not grow in proportion to the complete result.',
+					'Exercise the failure matrix: stop the database mid-export, disconnect the client, exceed the row or byte limit, hit the deadline, and attempt another tenant’s cursor or filter. Confirm that the query is cancelled, the response is not mislabeled as complete, and the logs contain enough evidence to investigate without storing the exported data. Test through the real reverse proxy too, because buffering, idle timeouts, compression, and maximum response settings can change streaming behavior.',
+				],
+				bullets: ['A complete response parses as valid JSON and has the intended headers', 'Special characters and large individual fields remain correctly encoded', 'Slow clients trigger backpressure without unbounded memory growth', 'Client disconnect cancels the cursor or query', 'Database failure produces a detectable truncated export', 'Proxy buffering and idle timeouts match the documented behavior', 'Metrics show duration, rows, bytes, cancellations, failures, and memory pressure'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'Streaming is a useful optimization when it is paired with a bounded contract. It reduces peak application memory and can improve time-to-first-byte, but it does not reduce the total bytes sent, make a slow database fast, or guarantee that a client receives a complete document after a network failure. Compression may reduce bandwidth while increasing CPU and buffering; measure it at the proxy and application boundary instead of enabling it blindly.',
+					'Keep the default export small, give customers an explicit larger-export workflow, and make cancellation cheap. If operators cannot answer how many exports are running, how long they have been open, how many bytes they have sent, and which tenants are consuming the capacity, the endpoint is not ready for production. The goal is controlled delivery—not turning a request handler into an unbounded file server.',
+				],
+				bullets: ['Headers, authorization, limits, and media type are documented', 'The producer honors writable-stream backpressure', 'Database reads are bounded, indexed, and cancellable', 'Disconnects, timeouts, and downstream failures release resources', 'Export output is validated as a complete document in integration tests', 'Proxy buffering, compression, and idle timeouts are tested end to end', 'Observability covers active exports, duration, bytes, rows, cancellations, and failures', 'Long or resumable exports use a durable worker and object-storage path'],
+			},
+		],
+	},
 ];

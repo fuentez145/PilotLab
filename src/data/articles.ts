@@ -1648,4 +1648,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-secure-file-upload-pipeline-nodejs',
+		title: 'How to Build a Secure File Upload Pipeline in Node.js',
+		seoTitle: 'Secure File Uploads in Node.js | PilotLab',
+		dek: 'A practical design for accepting user files without trusting filenames, MIME types, or a single validation check to protect your application.',
+		published: '2026-08-15',
+		updated: '2026-08-15',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to build a secure file upload pipeline in Node.js',
+		intro: 'File uploads turn an ordinary API endpoint into a boundary around untrusted bytes, storage, parsers, and eventually other users. The safe design is not “check the extension and save the file.” It is a pipeline with explicit authorization, size limits, type validation, generated names, isolated storage, asynchronous scanning, and a retrieval policy that matches the file’s sensitivity. This guide gives a provider-neutral implementation plan for a Node.js product team.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OWASP — File Upload Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html' },
+			{ label: 'Node.js Documentation — File system', url: 'https://nodejs.org/api/fs.html' },
+			{ label: 'MDN — Content-Security-Policy header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: decide what the upload is allowed to do',
+				paragraphs: [
+					'Before choosing a multipart parser or object store, define the business contract. Is this an avatar, a PDF for an application, an image attached to a support ticket, or a customer export? Each use case needs its own allowlist, maximum size, retention period, visibility, and processing path. “Allow any file” is not a useful product requirement and makes every downstream parser part of your attack surface.',
+					'You also need authenticated identity, authorization for the target record, a durable metadata store, and an object-storage or filesystem location that is not directly executable. OWASP recommends limiting extensions to what the business needs, setting size limits, authorizing uploads, generating filenames, and storing files outside the webroot or on a separate server. Treat those as baseline controls, not optional hardening.',
+				],
+				bullets: ['An authenticated upload route with tenant and resource authorization', 'An allowlist of required file types and a per-type size limit', 'Durable metadata for owner, status, size, detected type, and timestamps', 'Private storage or a download handler with an authorization check', 'A scanning or review step before a file becomes available to other users'],
+			},
+			{
+				heading: 'Validate the request before writing bytes',
+				paragraphs: [
+					'Enforce request and part limits at the edge, web server, framework parser, and application layer. A client-provided Content-Type is useful as an early hint, but it is not proof: OWASP explicitly notes that it can be spoofed. Do not let a multipart parser buffer an unbounded body before your application gets a chance to reject it.',
+					'Validate the decoded filename only to derive user-facing metadata; never use it as a filesystem path. Reject path separators, control characters, unexpected length, and double-extension tricks. Generate an opaque storage key such as a UUID, keep the original name in metadata after normalizing it for display, and preserve the extension only if your retrieval and processing policy needs it.',
+				],
+				bullets: ['Reject unauthenticated or unauthorized uploads before consuming expensive processing', 'Allowlist extensions rather than trying to block every dangerous extension', 'Treat the declared MIME type as an untrusted hint', 'Enforce a maximum byte count while streaming, not after buffering', 'Generate a storage key; never concatenate user input into a path', 'Return a generic validation error without revealing server paths or parser details'],
+			},
+			{
+				heading: 'Check the content, not just the label',
+				paragraphs: [
+					'After the stream is bounded, compare the claimed type with the bytes you actually received. Use a maintained file-type detector or parser appropriate to the allowlisted formats, and check a file signature where the format supports one. OWASP cautions that neither a MIME check nor a signature check is sufficient on its own; defense in depth is the point.',
+					'Keep parsing and transformation away from the request thread when they are expensive or have a history of parser vulnerabilities. A safe state machine is uploaded, validating, clean, rejected, and quarantined. Do not publish a file merely because it passed the first extension check. For PDFs, office documents, archives, and media, consider antivirus scanning and content disarm or reconstruction where the risk and product value justify it.',
+				],
+				bullets: ['Use an allowlist-specific detector for the formats your product accepts', 'Reject mismatches between extension, declared type, and detected content', 'Keep parser and antivirus dependencies patched and separately monitored', 'Quarantine files until scanning and any required transformation completes', 'Treat decompressed size and nested archives as separate limits', 'Make rejection and quarantine visible to an operator without exposing the file publicly'],
+			},
+			{
+				heading: 'Store safely and make writes race-resistant',
+				paragraphs: [
+					'Write to a private temporary object or directory first, then promote it only after validation. Set restrictive permissions and keep the storage location outside the application’s webroot. If you use a local filesystem, create the destination with a fixed base directory and generated names; resolve paths defensively and refuse anything that escapes that directory.',
+					'Node’s filesystem API documents exclusive creation with the wx flag: it fails when the path already exists. That is useful as one part of a safe write, but it does not replace authorization, generated identifiers, storage isolation, or a database uniqueness rule. For object storage, use a server-generated key and scoped credentials; do not expose a bucket-wide write credential to a browser or application feature that does not need it.',
+				],
+				bullets: ['Use a temporary key and an explicit promotion step', 'Create files with exclusive semantics so an unexpected collision fails', 'Store metadata and status separately from the untrusted original filename', 'Keep private objects private and issue short-lived authorized downloads', 'Apply retention and deletion rules to abandoned, rejected, and quarantined objects', 'Record a checksum or size for integrity and operational investigation'],
+			},
+			{
+				heading: 'Serve downloads as a separate security decision',
+				paragraphs: [
+					'An upload being clean does not mean it should be rendered inline for every caller. For private files, authorize the requesting user or tenant on every download and prefer a short-lived signed URL or a streaming handler that sets the correct content disposition. Avoid reflecting the original filename into HTML or response headers without safe encoding.',
+					'For files that must be public, use a dedicated asset origin or download handler and make the browser behavior intentional. A restrictive Content-Security-Policy can help control what a page may load, but it is not a substitute for access control, content validation, safe response headers, or storage isolation. Consider forcing download for formats that could contain active content rather than embedding them in an authenticated application page.',
+				],
+				bullets: ['Authorize downloads independently of upload permission', 'Use Content-Disposition and a safe, normalized display filename', 'Set a content type based on validated metadata, not a request header', 'Prevent user-controlled files from sharing the application origin when possible', 'Test direct object URLs, expired links, tenant changes, and deleted records', 'Never expose storage credentials or predictable object keys to clients'],
+			},
+			{
+				heading: 'Verify failure modes before production',
+				paragraphs: [
+					'Test the pipeline with valid files and adversarial inputs: an oversized body, a misleading extension, a spoofed MIME type, a truncated upload, a duplicate request, a filename containing path traversal characters, a nested archive, and a file that the scanner rejects. Assert that rejected bytes are not published, temporary objects are cleaned up, and the metadata status explains what an operator should do next.',
+					'Run concurrent uploads for the same resource and concurrent downloads while a file is being promoted. Then test the infrastructure failures: storage timeout, scanner outage, database failure after the object write, and worker restart during scanning. The recovery contract should be explicit: retry safely, quarantine for review, or delete the object. Do not turn a storage outage into a successful API response that points at a file which does not exist.',
+				],
+				bullets: ['Oversized uploads stop during streaming and do not fill temporary storage', 'A fake MIME type or extension cannot bypass content validation', 'Two workers cannot publish the same logical file twice', 'Scanner failure leaves the file unavailable rather than silently clean', 'A database failure does not create an orphaned publicly reachable object', 'Cross-tenant download and guessed-key tests return the same safe denial', 'Metrics cover upload size, rejection reason, scan latency, quarantine count, and cleanup failures'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'A secure upload feature is an operational workflow, not only a controller. Keep the limits and allowed types in configuration reviewed by the product owner and security owner. Give support a way to find a file by internal ID, inspect its state, and safely retry or delete it without granting broad storage access.',
+				],
+				bullets: ['Business-specific extension and detected-content allowlists are documented', 'Authentication, tenant scope, and resource authorization are enforced', 'Request, part, decompressed, and storage quotas are bounded', 'Filenames are generated for storage and escaped for display', 'Objects are private or served through an authorized download path', 'Validation, scanning, quarantine, promotion, and cleanup are observable', 'Parser, scanner, and storage credentials are patched and least-privileged', 'Retention, deletion, privacy, and incident-replay procedures are written down'],
+			},
+		],
+	},
 ];

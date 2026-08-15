@@ -1579,4 +1579,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-human-approval-ai-workflow',
+		title: 'How to Build a Human Approval Step into an AI Workflow',
+		seoTitle: 'Human Approval Steps for AI Workflows | PilotLab',
+		dek: 'A practical design for AI-assisted automation: return structured proposals, route risky decisions to a person, and keep the workflow auditable when the model is wrong.',
+		published: '2026-08-15',
+		updated: '2026-08-15',
+		readTime: '11 min read',
+		category: 'AI engineering',
+		keyword: 'how to build a human approval step into an AI workflow',
+		intro: 'The safest first version of an AI workflow is rarely fully autonomous. It is a system that turns messy input into a reviewable proposal, gives a person enough evidence to approve or correct it, and records what happened. This tutorial shows how to add that control point without turning every automation into a manual spreadsheet.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+			{ label: 'NIST — Generative AI Profile', url: 'https://doi.org/10.6028/NIST.AI.600-1' },
+			{ label: 'OpenAI API — Structured model outputs', url: 'https://platform.openai.com/docs/guides/structured-outputs' },
+			{ label: 'OWASP — GenAI LLM Top 10 2026', url: 'https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/' },
+		],
+		sections: [
+			{
+				heading: 'Choose a decision worth reviewing',
+				paragraphs: [
+					'A human approval step is useful when the model can prepare work faster than a person, but a wrong action has meaningful cost. Examples include routing a sales lead, approving a refund, publishing a customer-facing reply, changing a CRM record, or creating a support escalation. Start with one decision and define the acceptable outcome before you choose a model.',
+					'NIST describes the AI RMF as a way to incorporate trustworthiness into the design, development, use, and evaluation of AI systems. In practice, that means deciding who owns the decision, what evidence they need, what the model is allowed to suggest, and what happens when the evidence is missing. Do not use “confidence” as a permission boundary unless you have tested what that number means for your task.',
+				],
+				bullets: ['Name the trigger, decision, actor, and downstream side effect', 'Define which outcomes require approval and which may be auto-routed', 'Set a maximum age for a proposal before it must be re-evaluated', 'List data the model may access and data the reviewer may see', 'Choose a safe fallback when the model refuses or produces an invalid result'],
+			},
+			{
+				heading: 'Separate proposal from execution',
+				paragraphs: [
+					'The model should propose a typed action; application code should decide whether that action is valid and execute it only after authorization. Keep these stages separate: receive the input, generate a proposal, validate it, put it in a review queue, record the reviewer decision, and perform the side effect. A prompt must never be the only control that prevents a destructive operation.',
+					'Use a durable record with an immutable proposal ID, source reference, tenant, schema version, model and prompt revision, created time, expiry, status, and reviewer decision. Store only the input and context your retention policy permits. The record is what lets an operator explain why an action happened and what changed after a correction.',
+				],
+				bullets: ['Model output is an untrusted proposal, not a command', 'Authorization is evaluated by application code for the current reviewer and tenant', 'Only one terminal decision can win, even if two reviewers open the item', 'Executing the same approved proposal twice must be harmless or rejected', 'Keep proposal, approval, execution, and failure events distinct in logs'],
+			},
+			{
+				heading: 'Return structured output and validate it twice',
+				paragraphs: [
+					'For classification or extraction, define a small schema such as category, reason, missing_fields, suggested_action, and risk_flags. OpenAI documents Structured Outputs as a way to make model responses conform to a supplied schema, but a schema-conforming response can still be factually wrong or unsafe. Treat structured output as easier-to-validate data, not as proof of correctness.',
+					'Validate at two boundaries. First, reject malformed or incomplete model output before it enters the queue. Second, re-check the proposal when the reviewer approves it: reload the current source record, confirm the tenant and permissions, verify that the target still exists, and check that the proposal has not expired. This prevents a reviewer from approving a stale view that no longer matches the system of record.',
+				],
+				bullets: ['Use enums and bounded strings instead of free-form action names', 'Require an explicit “needs_review” or “cannot_decide” state', 'Reject unknown fields and invalid identifiers', 'Show source excerpts and missing evidence beside the proposal', 'Revalidate current state and permissions immediately before execution'],
+			},
+			{
+				heading: 'Design the review queue for a real operator',
+				paragraphs: [
+					'A review queue should reduce cognitive work, not make a person hunt through five systems. Show the proposed action, the source input, the relevant evidence, the risk flags, the age, and the exact effect of approval. Give the reviewer approve, reject, edit-and-approve, and request-more-information paths where they are meaningful. Make the safe choice the easy choice: approval should not silently include extra actions that were not displayed.',
+					'Use explicit ownership and leases so two people do not work the same item. Record the reviewer identity, decision time, reason code, edits, and application version. Do not treat a reviewer’s click as an oracle: sample approved and rejected items for quality review, and make corrections useful training or evaluation data without automatically feeding sensitive records back into a model.',
+				],
+				bullets: ['Prioritize by impact, age, and dependency rather than model confidence alone', 'Show a diff for proposed record changes', 'Require a reason for rejection or material edits', 'Expire or return abandoned items instead of leaving them invisible', 'Keep reviewer permissions narrower than administrator permissions'],
+			},
+			{
+				heading: 'Test prompt injection, stale data, and duplicate approval',
+				paragraphs: [
+					'OWASP’s 2026 GenAI LLM Top 10 is a current security reference for LLM applications. Its existence is a useful reminder that an AI workflow must treat retrieved text, uploaded documents, and customer messages as untrusted content. A document can contain instructions aimed at the model; those instructions are data, not authorization. Keep tools and side effects behind code-level permission checks.',
+					'Build a failure matrix before enabling automation. Submit normal, ambiguous, malicious, oversized, and incomplete inputs. Change the source record after proposal creation, approve from the wrong tenant, open the same item in two browser tabs, retry the approval request, and crash the worker after execution succeeds. The expected result should be explicit for every case: queue, reject, re-review, or execute once.',
+				],
+				bullets: ['Injected instructions in source text cannot change the allowed action set', 'Invalid or refused model output creates no side effect', 'A stale proposal requires fresh review or fails safely', 'Concurrent approvals produce one business outcome', 'A retried approval does not duplicate an email, payment, or record change', 'Logs and reviewer screens exclude secrets and unnecessary personal data'],
+			},
+			{
+				heading: 'Production checklist and when to remove the gate',
+				paragraphs: [
+					'Measure the workflow as a system. Track proposal validity, approval latency, approval and rejection rates, edit frequency, execution failures, duplicate attempts, queue age, and the quality of a sampled set. A high approval rate may mean the model is useful—or that reviewers are clicking through without reading. Pair speed metrics with outcome checks and periodic review.',
+					'Only reduce human review after evidence supports a narrower risk boundary. You might auto-route low-impact categories while keeping financial, legal, destructive, or customer-visible actions gated. Removing the gate is a product and risk decision, not a model setting. If the workflow cannot explain what was proposed, who approved it, and what code executed it, it is not ready for more autonomy.',
+				],
+				bullets: ['Every proposal has a durable ID, schema version, expiry, and source reference', 'Model output is schema-validated and business-validated before execution', 'Approval is tenant-scoped, permission-checked, auditable, and idempotent', 'Reviewers can inspect evidence and see the exact side effect', 'Prompt-injection and stale-state tests run in CI or a staging environment', 'Queue age, quality corrections, failures, and execution outcomes are visible', 'Sensitive inputs, prompts, and outputs follow retention and access policies', 'Autonomy expands only for measured, low-impact cases with rollback'],
+			},
+		],
+	},
 ];

@@ -1723,4 +1723,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'defend-ai-workflow-prompt-injection',
+		title: 'How to Defend an AI Workflow Against Prompt Injection',
+		seoTitle: 'Defend AI Workflows Against Prompt Injection | PilotLab',
+		dek: 'A practical architecture for keeping instructions in user text, documents, and tool results from becoming unauthorized actions in a production AI workflow.',
+		published: '2026-08-17',
+		updated: '2026-08-17',
+		readTime: '11 min read',
+		category: 'AI security',
+		keyword: 'how to defend an AI workflow against prompt injection',
+		intro: 'Prompt injection is not a prompt-writing problem you solve with one stronger sentence. It is a boundary problem: an AI system receives content that may contain instructions, while your application also has tools, data, and side effects that require authorization. This tutorial gives a small product team a practical design for separating those concerns and testing the places where an attacker can try to cross them.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'Microsoft Learn — Prompt Shields', url: 'https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection' },
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+			{ label: 'OpenAI API — Safety best practices', url: 'https://platform.openai.com/docs/guides/safety-best-practices' },
+			{ label: 'OWASP — LLM01: Prompt Injection', url: 'https://genai.owasp.org/llmrisk/llm01-prompt-injection/' },
+		],
+		sections: [
+			{
+				heading: 'Start by drawing the trust boundaries',
+				paragraphs: [
+					'Prompt injection occurs when content intended to be read is treated as instructions that control the system. The content may come from a user message, an uploaded document, an email, a web page, a retrieved chunk, or a tool result. Microsoft distinguishes user prompt attacks from document attacks because the entry point changes, but the engineering response is similar: classify external content as untrusted and keep it from granting authority.',
+					'Write down four separate things before changing the prompt: trusted application instructions, untrusted content, available tools, and side effects. If a support assistant can read a customer email and call a refund tool, the email must never be able to authorize that refund. The application—not the model—must decide which tenant, user, record, and operation are allowed.',
+				],
+				bullets: ['Treat user text, retrieved text, files, and tool results as data', 'Keep secrets and privileged instructions out of model-visible context where possible', 'Define the smallest tool set needed for each workflow state', 'Require application authorization immediately before every side effect', 'Give every action an owner, audit event, and rollback or review path'],
+			},
+			{
+				heading: 'Separate reading from acting',
+				paragraphs: [
+					'Use a two-stage design for workflows that touch real systems. First, let the model summarize, classify, or propose a typed action. Then validate that proposal in code and either queue it for review or execute a narrowly defined operation after a fresh authorization check. The model can help interpret messy input; it should not be the permission boundary.',
+					'A useful proposal schema might contain action, target_id, rationale, evidence_ids, risk_flags, and needs_review. Keep action as a closed enum, validate the target against the current tenant and record state, reject unknown fields, and discard proposals that are stale or incomplete. A schema makes output easier to handle, but it does not make the facts correct or the action safe.',
+				],
+				bullets: ['Use enums and bounded identifiers instead of free-form commands', 'Validate the proposal against the database, not only against a JSON schema', 'Reload current state before execution because retrieved context may be stale', 'Put payments, deletion, permission changes, and external messages behind approval', 'Make approval and execution idempotent so retries cannot duplicate effects'],
+			},
+			{
+				heading: 'Constrain tools as if the model were compromised',
+				paragraphs: [
+					'Design each tool with an explicit input schema, least-privilege credential, tenant scope, timeout, and rate limit. Prefer narrow operations such as get_order_status over a general database query tool. Return only the fields needed for the next step, and label tool output as untrusted data when it goes back into the model context.',
+					'Keep the dangerous decision outside the tool description. “The model has a refund tool” is not authorization. The server handling refund must check the authenticated actor, tenant, amount, current order state, approval record, idempotency key, and policy. If any check fails, return a safe denial and create an operator-visible event rather than asking the model to try a different route.',
+				],
+				bullets: ['Use allowlisted tools and arguments for each workflow', 'Never expose raw SQL, shell access, arbitrary URLs, or broad filesystem access to a model', 'Enforce tenant and user authorization in the tool service', 'Cap spend, rows, calls, and execution time per workflow', 'Log tool name, safe operation ID, decision, and outcome without secrets'],
+			},
+			{
+				heading: 'Add detection, but do not make it your only control',
+				paragraphs: [
+					'Prompt filters and jailbreak detectors can be useful as an additional signal. Microsoft documents Prompt Shields for user prompts and document attacks, and also warns that filters can produce false positives and false negatives. Use them to block, route, or add review for suspicious inputs—not to replace authorization, output validation, isolation, and safe tool design.',
+					'Keep detection policy-specific. A help-center summarizer may safely flag an instruction-like sentence, while a workflow that can change billing records should treat any attempt to redirect the agent as a reason to stop and review. Record the detector result, model version, policy version, and final disposition so the team can tune the boundary using real cases rather than anecdotes.',
+				],
+				bullets: ['Scan both direct prompts and external documents when the workflow accepts them', 'Use a safe fallback: refuse, summarize without acting, or route to a person', 'Measure false positives and false negatives on a permission-safe evaluation set', 'Keep detector failures fail-closed for high-impact actions', 'Do not show attackers detailed detector rules or hidden prompts'],
+			},
+			{
+				heading: 'Test attacks as end-to-end business scenarios',
+				paragraphs: [
+					'Test the running workflow, not only the model call. Put instruction-like text in a support ticket, PDF, retrieved knowledge-base entry, and tool response. Ask it to reveal secrets, change the allowed task, call an unapproved tool, cross a tenant boundary, or skip approval. Assert the business result: no unauthorized read, no side effect, no secret in the response, and a useful audit event.',
+					'Include benign instruction-like content so you can see whether the control is usable. Test malformed structured output, detector outage, model timeout, stale records, duplicate approval, a revoked user, and a tool that returns unexpected fields. OpenAI recommends safety measures such as monitoring and red-teaming; NIST frames risk management as a design, development, use, and evaluation activity. Treat these tests as a release gate for the workflow, not a one-time security exercise.',
+				],
+				bullets: ['Injected text cannot expand the allowlisted action set', 'A document cannot authorize access to another tenant', 'Tool failure or detector outage cannot trigger an unsafe fallback', 'Secrets and hidden instructions are not returned to the user', 'A repeated approval or retry produces one logical side effect', 'Every blocked or approved action can be traced to input, policy, and code'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'No detector can prove that a prompt is safe, and no model is a trustworthy policy engine by itself. The durable defense is layered: minimize context, isolate tenants, constrain tools, validate proposals, authorize in code, require approval for impact, and monitor outcomes. Keep the workflow useful by making the safe path fast and by giving reviewers the evidence needed to resolve an ambiguous case.',
+					'Review the system whenever you add a data source, tool, model, prompt, or side effect. Record proposal and execution IDs, policy and prompt revisions, reviewer decisions, tool outcomes, and redacted evidence. At PilotLab, this is the difference between an AI demo and an operable workflow: the team can understand what the system attempted, stop it safely, and improve it without guessing.',
+				],
+				bullets: ['External content is labeled and handled as untrusted data', 'Model output is schema-validated, business-validated, and expiry-checked', 'Authorization is enforced by application code at the point of action', 'Tools are narrow, least-privileged, rate-limited, and time-bounded', 'High-impact actions require human approval with a visible diff', 'Prompt-injection, tenant-isolation, stale-state, and retry tests run before release', 'Logs and evaluations protect secrets and personal data', 'A kill switch or configuration path can disable risky actions quickly'],
+			},
+		],
+	},
 ];

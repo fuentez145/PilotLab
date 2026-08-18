@@ -1860,4 +1860,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'cancel-upstream-requests-nodejs-api',
+		title: 'How to Cancel Upstream Requests in a Node.js API',
+		seoTitle: 'Cancel Upstream Requests in a Node.js API | PilotLab',
+		dek: 'Use AbortController to stop work when a client disconnects or a deadline expires, without turning cancellation into a retry storm or a misleading 500 error.',
+		published: '2026-08-18',
+		updated: '2026-08-18',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to cancel upstream requests in a Node.js API',
+		intro: 'A request that has already lost its client can still consume a database connection, wait on a vendor API, or keep an AI generation running. Timeouts limit how long work may run; cancellation lets the work stop when it no longer has a useful caller. This tutorial shows how to carry that signal through a Node.js API, distinguish user cancellation from a deadline, and verify that the upstream operation really stops.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Docs — AbortController and AbortSignal', url: 'https://nodejs.org/api/globals.html#class-abortcontroller' },
+			{ label: 'Node.js Docs — Fetch API', url: 'https://nodejs.org/api/globals.html#fetch' },
+			{ label: 'MDN — AbortController', url: 'https://developer.mozilla.org/en-US/docs/Web/API/AbortController' },
+			{ label: 'MDN — AbortSignal.timeout()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout' },
+		],
+		sections: [
+			{
+				heading: 'Decide what cancellation means for this operation',
+				paragraphs: [
+					'Cancellation is a control signal, not a promise that every underlying system can undo work. It is usually appropriate for an HTTP fetch, a response body stream, a model generation, or a query API that accepts a signal. It is not a safe substitute for a transaction, a queue, or an idempotency key after a payment or other side effect has already been committed.',
+					'Before adding a controller, classify the upstream operation. If it is read-only, stopping it after the caller leaves is often exactly right. If it has a side effect, make the operation idempotent and define whether cancellation means “stop before commit,” “stop waiting but let the job finish,” or “reconcile status later.” A disconnected HTTP client must not be allowed to create an ambiguous business state.',
+				],
+				bullets: ['A Node.js API route that calls an upstream HTTP service', 'An upstream client that accepts an AbortSignal, or a documented cancellation method', 'A request deadline chosen from the route’s user and dependency budget', 'A way to log request, upstream, and cancellation outcomes safely', 'Tests that can make the upstream operation deliberately slow'],
+			},
+			{
+				heading: 'Create one signal for the request and its deadline',
+				paragraphs: [
+					'Use an AbortController for the lifecycle of the incoming request and a timeout signal for the maximum useful duration. Node.js exposes AbortController and AbortSignal globally, and documents AbortSignal.timeout() and AbortSignal.any() for composing signals. A practical route combines the client-disconnect signal with a deadline signal so either event can stop the upstream call.',
+					'For a standard Node HTTP server, listen for the request or response closing before the operation completes, then abort the controller. Frameworks expose this lifecycle differently, so use the framework’s documented request-aborted or response-closed event rather than guessing from a socket property. Always remove listeners in a finally block; otherwise a long-lived process can accumulate callbacks and retain request state.',
+					'Keep the deadline at the application boundary. Do not accept an arbitrary timeout from the caller, and do not use one huge global timeout for every dependency. A search endpoint, an interactive AI draft, and an internal export have different budgets. The deadline should leave room for authentication, validation, serialization, and a useful response.',
+				],
+			},
+			{
+				heading: 'Pass the signal through every cancellable layer',
+				paragraphs: [
+					'Passing the signal is the part teams most often miss. Attach it to the upstream fetch or SDK call, and pass it again when consuming a response body or stream. If the route calls several read-only dependencies in sequence, use the same composed signal so the deadline applies to the whole request. If it starts parallel work, give each operation the signal and await cleanup before returning.',
+					'Hide this wiring in a small client function with an explicit contract. The caller should provide a signal and receive either a normal result or a typed failure; the client should not silently create a fresh controller that the route cannot abort. For libraries that do not support AbortSignal, use their native cancellation mechanism or isolate the work behind a queue. A signal that is never observed is only documentation.',
+				],
+				bullets: ['Pass the same signal to fetch, body consumption, and SDK methods where supported', 'Do not swallow an already-aborted signal before the dependency sees it', 'Close or release response bodies and client resources in finally', 'Keep non-cancellable work small and bounded around the upstream call', 'Use a queue for durable work instead of holding it on an interactive request'],
+			},
+			{
+				heading: 'Map aborts to honest API behavior',
+				paragraphs: [
+					'An AbortError caused by a browser Stop button is not the same incident as an upstream 503. If the client has already disconnected, there may be nothing useful to send; log the outcome and stop work. If your deadline fires while the client is still connected, return a documented timeout response such as 504 when your API contract treats the dependency as a gateway, or another stable error shape used consistently across the product.',
+					'Node and web-compatible APIs expose an abort reason, and timeout signals can distinguish a TimeoutError from a user-triggered AbortError. Preserve that distinction internally, but keep the public response safe and stable. Do not retry automatically just because a request was aborted: retrying after the user leaves can increase cost and duplicate work. Retry only bounded, idempotent operations for errors your policy identifies as transient, and make the retry share the remaining deadline.',
+				],
+				bullets: ['Client disconnect: stop quietly and avoid writing to a closed response', 'Application deadline: return the API’s documented timeout error and request ID', 'Upstream rejection: map it through the normal dependency error policy', 'Side-effect uncertainty: reconcile or query status instead of blindly retrying', 'Every path: record whether work completed, failed, timed out, or was cancelled'],
+			},
+			{
+				heading: 'Test that work stops, not only that the route returns',
+				paragraphs: [
+					'Build a controllable fake upstream that records when it receives the signal and stops only after observing it. Start a request, force the client to disconnect, and assert that the upstream promise settles and its stream or socket is closed. Then repeat with a deadline, a normal fast response, a malformed response, and an upstream error. A test that only checks the HTTP status can pass while the expensive operation continues in the background.',
+					'Exercise races deliberately. Abort immediately before the upstream resolves, abort while reading a response body, and abort after a side effect has been submitted. Assert that the handler emits at most one outcome, never writes after the response closes, and does not retry a cancellation. Add an integration test through the real reverse proxy or platform path because buffering and disconnect propagation can differ from a local process.',
+				],
+				bullets: ['Fast upstream completes before the deadline and returns one normal response', 'Slow upstream observes client cancellation and releases its resources', 'Deadline produces one timeout outcome without an unbounded retry', 'Abort during body streaming closes the reader and does not persist partial data', 'Concurrent cancellation and completion do not create duplicate side effects', 'Metrics show cancellation, timeout, upstream error, and success separately'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Cancellation improves resource use and user experience, but it is cooperative. The signal cannot rewind bytes already sent, undo a remote side effect, or guarantee that a dependency immediately releases capacity. Treat it as one part of a reliability design that also includes deadlines, idempotency, bounded retries, connection pooling, and reconciliation for uncertain outcomes.',
+					'Before release, document the cancellation contract for each important route and dependency. At PilotLab, we make the signal visible in the integration boundary, keep the error mapping consistent, and add an operator signal for unexpected cancellation or timeout spikes. That turns a subtle lifecycle detail into something a product team can test and maintain.',
+				],
+				bullets: ['Every interactive upstream call receives a caller-owned or composed signal', 'Deadlines are server-controlled, route-specific, and observable', 'Client disconnects do not trigger unsafe retries or new side effects', 'Timeout and cancellation errors are distinct in logs and metrics', 'Response bodies, streams, timers, and event listeners are cleaned up', 'Side-effecting operations use idempotency and reconciliation', 'Dashboards show cancellation rate, deadline rate, upstream latency, and resource saturation', 'A runbook explains which operations may stop and which must finish in a job'],
+			},
+		],
+	},
 ];

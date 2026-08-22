@@ -1996,4 +1996,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'roll-out-content-security-policy-report-only',
+		title: 'How to Roll Out a Content Security Policy Without Breaking Your Site',
+		seoTitle: 'Roll Out a Content Security Policy Safely | PilotLab',
+		dek: 'A practical CSP rollout for marketing sites and web apps: inventory resources, observe violations first, tighten the policy, and verify that security controls do not become an outage.',
+		published: '2026-08-22',
+		updated: '2026-08-22',
+		readTime: '10 min read',
+		category: 'Web security',
+		keyword: 'how to roll out a Content Security Policy safely',
+		intro: 'Content Security Policy is most useful when it becomes a measured browser control rather than a header copied from a checklist. A policy that is too broad adds little defense; one that is too strict can break analytics, payments, embeds, or your own deployment. This tutorial gives a small product team a staged rollout: map what the site loads, observe violations without blocking users, remove unsafe dependencies, then enforce a policy you can maintain.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — Content Security Policy', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP' },
+			{ label: 'MDN — Content-Security-Policy-Report-Only', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy-Report-Only' },
+			{ label: 'web.dev — Content Security Policy', url: 'https://web.dev/articles/csp' },
+			{ label: 'W3C — Content Security Policy Level 3', url: 'https://www.w3.org/TR/CSP3/' },
+		],
+		sections: [
+			{
+				heading: 'Start with the threat and the inventory',
+				paragraphs: [
+					'CSP is defense in depth against content injection, especially cross-site scripting. It tells the browser which resources a document may load or execute, but it does not replace output encoding, input validation, safe templating, or dependency review. W3C describes CSP as a way to reduce the privilege of injected content, not as a first-line substitute for fixing the injection bug.',
+					'Before writing a policy, inventory every page template and runtime path. List scripts, styles, images, fonts, frames, form destinations, WebSocket or fetch endpoints, analytics, payment widgets, tag managers, customer-support tools, and inline code. Inspect the rendered site in a browser and review network requests from authenticated and unauthenticated flows. A source that appears only after a click is still part of the contract.',
+				],
+				bullets: ['Record the origin and resource type for every required request', 'Separate first-party assets from vendors and user-controlled content', 'Identify inline scripts, inline event handlers, eval-like APIs, and dynamic script insertion', 'Test login, checkout, forms, embeds, uploads, and error pages', 'Give one owner responsibility for the policy and its exceptions'],
+			},
+			{
+				heading: 'Begin with a report-only policy',
+				paragraphs: [
+					'Send Content-Security-Policy-Report-Only while the inventory is incomplete. MDN documents that this header monitors violations without enforcing the restrictions, which lets you discover legitimate dependencies before users lose functionality. It is an observation phase, not a security boundary: an attacker is not blocked by a report-only policy.',
+					'Keep the first policy explicit enough to reveal surprises. A useful starting point for a mostly static site might name the document, script, style, image, font, connection, frame, and form destinations separately instead of relying on one permissive default. Do not treat a policy containing unsafe-inline or a wildcard as finished; record why each exception exists and what change would remove it.',
+				],
+				bullets: ['Use the response header on all relevant document responses', 'Keep report-only and enforcing policies separate while testing', 'Prefer exact HTTPS origins over wildcards', 'Use object-src \'none\' unless legacy plugins are genuinely required', 'Add frame-ancestors and base-uri deliberately for the application’s embedding model'],
+			},
+			{
+				heading: 'Collect reports without creating a new data leak',
+				paragraphs: [
+					'Violation reports are operational input. They can contain a blocked URL, document URL, directive, and browser details, so receive them at a deliberately protected endpoint or a service designed for browser reports. MDN notes that report-to uses the Reporting API and a Reporting-Endpoints response header; report-uri remains a deprecated compatibility mechanism in browsers that need it. Verify the browser support you actually need before removing the older path.',
+					'Do not log reports as unbounded raw JSON. Validate the content type and size, rate-limit the endpoint, discard fields you do not need, and avoid storing query strings or user-specific URLs when they may contain secrets or personal data. Group violations by directive, blocked origin, route family, and release so one noisy browser extension does not hide a real regression. Reports are signals, not proof that every violation is exploitable.',
+				],
+				bullets: ['Make the report endpoint cheap, bounded, and unauthenticated only when necessary', 'Validate and cap report bodies before persistence', 'Redact query strings, tokens, and user-specific path segments', 'Distinguish browser extensions and stale pages from application regressions', 'Alert on new first-party violations and unexpected vendor origins'],
+			},
+			{
+				heading: 'Tighten the policy by removing exceptions',
+				paragraphs: [
+					'Fix the causes of violations instead of adding every blocked origin to the allowlist. Move inline JavaScript into versioned external modules, replace inline event handlers with listeners, remove eval-like code where possible, and make third-party dependencies explicit. For inline scripts that cannot be removed, use a per-response nonce or a hash with the matching script attribute; keep the nonce unpredictable and never reuse it as an application identifier.',
+					'Use narrow directives that match how the site works. script-src controls executable scripts, style-src controls styles, img-src controls images, connect-src covers fetch and related connections, frame-src controls frames loaded by the page, and form-action limits form submissions. A source allowed in one directive is not automatically allowed in another. Test the real route after each change, because a policy that works on the homepage may block a dashboard’s API or an embedded payment flow.',
+				],
+				bullets: ['Remove unsafe-inline and unsafe-eval rather than hiding them behind a broad allowlist', 'Prefer nonces or hashes for unavoidable inline code', 'Keep third-party origins to the exact services and resource types required', 'Use strict-dynamic only when you understand its browser and trust implications', 'Treat user-uploaded content and embedded documents as separate security boundaries'],
+			},
+			{
+				heading: 'Enforce gradually and verify the customer paths',
+				paragraphs: [
+					'When reports show that required flows are clean, deploy Content-Security-Policy for enforcement. Start with a representative route set and a rollback mechanism at the edge or deployment configuration. Keep a report destination on the enforcing policy so new violations remain visible after the browser begins blocking. A successful header check is not enough: CSP can fail only after a user opens a menu, submits a form, signs in, or reaches a vendor-powered flow.',
+					'Use browser automation or a repeatable manual matrix to verify both security and behavior. Assert that intended scripts load, unintended origins are blocked, forms submit only to approved destinations, frames obey the embedding policy, and the application still handles a blocked optional dependency gracefully. Check the response headers through the CDN or reverse proxy, not only against a local development server.',
+				],
+				bullets: ['Verify headers on HTML responses through the production delivery path', 'Exercise anonymous, authenticated, mobile, and error routes', 'Test login, checkout, uploads, analytics consent, and third-party embeds', 'Confirm blocked optional resources degrade without breaking core work', 'Keep rollback to the previous header one configuration change away'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'CSP is a browser-enforced reduction of execution and loading privilege. It does not secure a compromised server, repair unsafe application code, protect non-browser API clients, or make a trusted third-party script trustworthy. Review the policy whenever you add a vendor, change a bundler, introduce inline configuration, add an iframe, or change where the application sends data.',
+					'Keep the policy small enough to understand and strict enough to matter. Document every origin and exception, pin or review third-party scripts, monitor report volume, and periodically remove unused allowances. If the site cannot yet meet a strict policy, report-only findings still provide a useful engineering backlog—but do not describe observation as protection. The durable outcome is a tested header plus safer application code and a clear owner for future changes.',
+				],
+				bullets: ['The policy is generated and reviewed as deployment configuration', 'Report-only findings are triaged before enforcement', 'No wildcard, unsafe-inline, or unsafe-eval remains without a documented reason', 'Nonces or hashes are generated and applied correctly where needed', 'Reports are bounded, redacted, rate-limited, and access-controlled', 'Critical customer journeys pass browser-level regression tests', 'CDN, proxy, application, and preview environments are checked consistently', 'A new vendor or route cannot silently bypass policy review', 'The team knows CSP is defense in depth, not a replacement for secure coding'],
+			},
+		],
+	},
 ];

@@ -1929,4 +1929,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-ai-api-budget-fallbacks',
+		title: 'How to Design AI API Budgets and Fallbacks',
+		seoTitle: 'AI API Budgets and Fallbacks: A Practical Design | PilotLab',
+		dek: 'A practical control plane for AI features: set time, token, cost, and retry budgets, then degrade safely when a model or provider is unavailable.',
+		published: '2026-08-22',
+		updated: '2026-08-22',
+		readTime: '10 min read',
+		category: 'AI engineering',
+		keyword: 'how to design AI API budgets and fallbacks',
+		intro: 'An AI feature can be correct in a demo and still be a poor production dependency. A slow model call can hold a web request open, a retry loop can multiply spend, and a provider limit can turn one busy tenant into an incident. The answer is not a single timeout: design explicit budgets for time, tokens, cost, retries, and degraded behavior, then enforce them at the application boundary.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'OpenAI API Docs — Rate limits', url: 'https://platform.openai.com/api/docs/guides/rate-limits' },
+			{ label: 'OpenAI API Docs — Production best practices', url: 'https://platform.openai.com/api/docs/guides/production-best-practices' },
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+		],
+		sections: [
+			{
+				heading: 'Start with a budget contract',
+				paragraphs: [
+					'Before choosing a model, write down what one user action is allowed to consume and what the user sees when that allowance is exhausted. A synchronous support-draft feature might have a two-second deadline, one model attempt, and a human-written fallback. A nightly enrichment job can have a longer deadline and a queue, but it still needs a per-item cost ceiling and a maximum retry count.',
+					'Treat these as separate controls. A request limit protects throughput; a token limit protects provider capacity; a timeout protects the user and your worker; a cost budget protects the account. One does not substitute for another. OpenAI documents separate requests-per-minute and tokens-per-minute limits, and notes that oversized token settings can affect rate-limit calculations.',
+				],
+				bullets: ['Time: maximum end-to-end and provider-call duration', 'Tokens: input and output ceilings for the task', 'Cost: maximum estimated spend per request, user, and tenant', 'Retries: which errors are retryable and how many attempts are allowed', 'Degradation: the safe result when the budget or dependency is unavailable'],
+			},
+			{
+				heading: 'Put enforcement in one provider-neutral boundary',
+				paragraphs: [
+					'Do not let route handlers call a model SDK directly. Create a small AI gateway or application service with an interface such as `complete(task, input, policy, signal)`. It should resolve the model policy, estimate or reserve capacity, attach a deadline, validate the output, record usage, and return a typed result. The rest of the product should not need to know which provider or model served the request.',
+					'Pass a caller-owned cancellation signal and compose it with the gateway deadline. In Node.js, `AbortSignal.any([requestSignal, AbortSignal.timeout(deadlineMs)])` lets either a disconnected client or the application deadline stop a cancellable provider call. A timeout is not enough if the SDK does not receive the signal, and cancellation does not undo a side effect already submitted to a remote system.',
+				],
+				bullets: ['Keep API keys and provider selection on the server', 'Make policy inputs explicit: task, tenant, priority, deadline, and max output', 'Use structured output validation before persistence or tool execution', 'Return typed outcomes such as success, timeout, rate_limited, invalid_output, and unavailable', 'Log request ID, model policy, duration, and usage metadata—not prompts containing secrets'],
+			},
+			{
+				heading: 'Choose fallback levels, not a single backup model',
+				paragraphs: [
+					'A fallback should preserve the user’s goal, not merely produce another model response. Define a ladder for each feature. For a draft, the ladder might be primary model, smaller approved model, then a saved template with the original request placed in a review queue. For classification, a deterministic rule or “needs review” result may be safer than a lower-quality guess. For a destructive tool call, the only acceptable fallback may be no action plus an approval task.',
+					'Keep fallback policy task-specific. A smaller model is not automatically cheaper in total if it produces invalid output and triggers more attempts. Do not silently change the meaning of a request when degrading: preserve tenant scope, permissions, language, and required fields. If no fallback meets the quality threshold, fail clearly and make recovery possible.',
+				],
+				bullets: ['Fallback to a model only when its schema and quality are acceptable for that task', 'Fallback to deterministic behavior for narrow, safety-critical decisions', 'Fallback to human review when uncertainty or impact is high', 'Never bypass authorization, validation, or approval because the primary model failed', 'Tell the user whether the result is complete, pending review, or unavailable'],
+			},
+			{
+				heading: 'Retry only bounded, transient failures',
+				paragraphs: [
+					'Retrying every error is an easy way to turn an outage into higher spend. Retry only errors your provider contract identifies as transient, such as a temporary availability response or rate limit, and use exponential backoff with jitter. Honor a provider’s retry guidance when available. The retry budget must share the original deadline: an attempt that starts with no time left is not resilience.',
+					'Be especially careful with requests that invoke tools, send messages, or create records. A network timeout after the provider accepted a request creates an unknown outcome. Do not blindly replay a side effect. Use an idempotency key when the provider supports it, record the operation, or move it to a durable reconciliation workflow. OpenAI’s production guidance also frames retries and exponential backoff as application concerns rather than a guarantee that a retry will be safe.',
+				],
+				bullets: ['Cap attempts and total retry time', 'Add jitter so many workers do not retry together', 'Do not retry invalid requests, policy refusals, authentication failures, or invalid model output by default', 'Separate provider rate limits from your own tenant quota', 'Record the attempt number and final reason for every outcome'],
+			},
+			{
+				heading: 'Measure quality and spend together',
+				paragraphs: [
+					'A gateway without evaluation becomes a traffic router with opinions. Keep a permission-safe test set for each task and measure schema validity, task success, human correction, refusal quality, latency, fallback rate, token usage, and estimated cost. Compare policies using the same examples before changing the default model or output limit.',
+					'At runtime, aggregate by task, model policy, tenant, route, outcome, and fallback level. Alert on budget exhaustion, provider errors, queue age, invalid-output spikes, and cost per successful task—not just requests per minute. NIST describes the AI RMF as a voluntary framework for incorporating trustworthiness into design, development, use, and evaluation; an explicit budget and evaluation trail is a practical way to make those concerns operational.',
+				],
+			},
+			{
+				heading: 'Verify the failure paths before production',
+				paragraphs: [
+					'Use a fake provider and a sandbox to test the gateway deterministically. Return a rate-limit response, delay beyond the deadline, return malformed structured output, exhaust the token estimate, and simulate a connection failure after a side effect could have been accepted. Assert the typed outcome, retry count, user-visible response, usage record, and absence of unauthorized writes for every case.',
+					'Then run a small staged load test with realistic concurrency. Confirm that one tenant cannot consume another tenant’s reserved capacity, that concurrent retries do not exceed the intended budget, and that a provider outage produces the documented degraded state rather than a request pile-up. Keep a feature flag or policy switch so operators can disable a costly path without redeploying the entire product.',
+				],
+				bullets: ['Fast success stays within the task deadline and records usage', 'Rate limits back off without a retry storm', 'Timeouts cancel cancellable work and release request resources', 'Invalid output never reaches a database or tool without validation', 'Unknown side-effect outcomes enter reconciliation rather than blind replay', 'Tenant and user budgets remain isolated under concurrent load', 'Dashboards show success, fallback, timeout, refusal, cost, and queue age separately'],
+			},
+		],
+	},
 ];

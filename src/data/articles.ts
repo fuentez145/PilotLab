@@ -2141,4 +2141,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'secure-oauth-pkce-nodejs-web-app',
+		title: 'How to Secure an OAuth Login Flow with PKCE',
+		seoTitle: 'Secure OAuth Login with PKCE in a Web App | PilotLab',
+		dek: 'A practical implementation guide for protecting OAuth authorization-code flows: generate the verifier correctly, bind the callback, exchange once, and test the failure paths.',
+		published: '2026-08-30',
+		updated: '2026-08-30',
+		readTime: '10 min read',
+		category: 'API security',
+		keyword: 'how to secure OAuth login with PKCE in a web app',
+		intro: 'OAuth login is a protocol boundary, not a redirect button. A web application must prove that the callback belongs to the login it started, protect the authorization code while it is in transit, and avoid turning an identity-provider response into an unvalidated application session. PKCE is a focused control for the authorization-code flow; it is valuable, but it does not replace state validation, redirect-URI checks, TLS, or careful token handling. This tutorial turns those requirements into an implementation and verification checklist for a small product team.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 7636 — Proof Key for Code Exchange', url: 'https://www.rfc-editor.org/rfc/rfc7636' },
+			{ label: 'IETF RFC 9700 — Best Current Practice for OAuth 2.0 Security', url: 'https://www.rfc-editor.org/rfc/rfc9700' },
+			{ label: 'IETF RFC 8252 — OAuth 2.0 for Native Apps', url: 'https://www.rfc-editor.org/rfc/rfc8252' },
+			{ label: 'MDN — Web Crypto API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API' },
+		],
+		sections: [
+			{
+				heading: 'Choose the flow and define the trust boundaries',
+				paragraphs: [
+					'This guide assumes an authorization-code flow where your application sends the user to an authorization server and receives a short-lived code at a registered callback. Your server then exchanges that code for tokens. Keep the provider-specific URLs, client identifier, redirect URI, scopes, and token response handling in one integration module rather than scattering them through route handlers.',
+					'PKCE addresses authorization-code interception: the client creates a secret code_verifier, sends a derived code_challenge in the authorization request, and presents the verifier at the token endpoint. RFC 7636 defines the S256 challenge as BASE64URL-ENCODE(SHA256(ASCII(code_verifier))). RFC 9700 is broader and recommends current OAuth security practices, including avoiding insecure modes and using PKCE for authorization-code flows where applicable. Treat the provider’s documented support and required parameters as part of the contract.',
+				],
+				bullets: ['A registered HTTPS redirect URI for production', 'A server-side callback that can keep short-lived login state', 'A provider client ID and secret only where the client is confidential', 'A session store or encrypted, signed session mechanism', 'A way to inspect redirects, cookies, and token-exchange logs safely'],
+			},
+			{
+				heading: 'Generate and store a fresh verifier for every login',
+				paragraphs: [
+					'At the start of login, generate a high-entropy, URL-safe code_verifier and keep it with the login transaction. Do not use a predictable user ID, timestamp, or reusable application secret. Derive the S256 challenge from that exact verifier, then send only the challenge in the authorization request. The verifier must remain available to the callback but should expire quickly and be single-use.',
+					'If browser JavaScript generates the verifier, use a cryptographically secure random source such as the Web Crypto API and store the transaction in a protected, short-lived mechanism. A server-rendered application can generate it server-side and bind it to a signed, HttpOnly, Secure, appropriately scoped cookie or server-side session record. Do not put the verifier in a long-lived URL, analytics event, or ordinary application log.',
+				],
+				bullets: ['Generate one verifier per authorization attempt', 'Use S256 rather than sending the verifier as the challenge', 'Bind the transaction to the browser session and an expiry', 'Store only what the callback needs: verifier, state, provider, redirect URI, and creation time', 'Delete or mark the transaction used after a successful or terminal callback'],
+			},
+			{
+				heading: 'Bind the callback before exchanging the code',
+				paragraphs: [
+					'Include a separate, unpredictable state value in the authorization request and validate it at the callback. State binds the response to the login transaction; PKCE binds the code exchange to the verifier. They address different checks, so do not remove state because PKCE is enabled. Reject a missing, expired, already-used, or mismatched state before calling the token endpoint.',
+					'Validate the callback’s issuer and error shape, then exchange the code only once with the exact registered redirect_uri, client_id, and stored code_verifier. Do not accept a redirect URI or provider selected from an arbitrary callback parameter. The authorization server should enforce exact redirect registration, but your application should still use a fixed allowlist and refuse a callback whose provider or redirect context does not match the transaction.',
+				],
+				bullets: ['Compare state using a constant-time-safe equality helper where available', 'Reject unexpected provider, issuer, redirect, or transaction identifiers', 'Treat an authorization error as a failed login, not as a token response', 'Never exchange a code after state validation fails', 'Ensure the callback cannot be used as an open redirect'],
+			},
+			{
+				heading: 'Handle tokens and identity as untrusted input',
+				paragraphs: [
+					'A successful token response is not automatically a valid application identity. Validate the response shape, token type, expiry information, and provider-specific identity claims according to the provider’s documented protocol. If you use OpenID Connect, validate the ID token with an appropriate maintained library and the provider’s discovery and signing-key rules; do not decode a JWT and trust its payload without signature and claim validation.',
+					'Keep access tokens on the server when your architecture permits it, and issue your own application session after the provider exchange. Regenerate the application session identifier at login to prevent session fixation. Do not log authorization codes, access tokens, refresh tokens, ID tokens, cookies, or full callback URLs. If the provider returns an error or an unknown response, clear the login transaction and show a generic recovery path without echoing sensitive values.',
+				],
+				bullets: ['Validate token and identity claims before creating a local session', 'Check issuer, audience, expiry, nonce where your protocol requires it, and signature', 'Store provider tokens encrypted or in a server-side secret store', 'Rotate or revoke refresh credentials according to provider and product policy', 'Use Secure, HttpOnly, and an intentional SameSite cookie policy for the local session'],
+			},
+			{
+				heading: 'Test interception, replay, and configuration mistakes',
+				paragraphs: [
+					'Test the complete redirect with a provider sandbox or a local test authorization server. Capture the authorization request and confirm it contains the expected client_id, exact redirect_uri, state, code_challenge, and code_challenge_method=S256, but not the verifier. Complete a normal login and verify that the callback consumes the transaction once and creates one local session.',
+					'Then alter one input at a time. Replace the state, verifier, provider, redirect URI, or code; replay an already-used callback; expire the transaction; return an authorization error; and make the token endpoint return malformed or delayed data. Every invalid case should fail before an application session or downstream account mutation is created. Test the actual production proxy and cookie domain, because an HTTPS redirect that works locally can fail when forwarded headers or secure-cookie settings are wrong.',
+				],
+				bullets: ['A changed state makes no token request', 'A changed verifier makes the provider reject the exchange', 'A reused code or transaction cannot create a second session', 'A mismatched redirect URI is rejected by both provider and application', 'Provider errors do not leak codes or tokens to logs or users', 'Cookies survive the intended cross-site redirect without becoming broadly scoped'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'PKCE is a proof that the party completing the exchange has the verifier created for that authorization request. It does not prove that the user is authorized for every action in your product, protect an application already compromised by XSS, or make an incorrectly configured redirect safe. Keep normal authorization checks after login, maintain least-privilege scopes, and review provider changes as you would any other external API contract.',
+					'Before launch, document the provider configuration, redirect allowlist, scopes, cookie policy, token retention, account-linking rules, logout behavior, and incident response for a leaked credential. Monitor failed callbacks, state mismatches, token-exchange failures, unusual account-linking attempts, and repeated authorization errors. The useful success criterion is not merely “the social login works”; it is that a legitimate login succeeds while replay, substitution, misrouting, and provider failure remain bounded and diagnosable.',
+				],
+				bullets: ['Authorization-code flow and S256 PKCE are explicitly enabled', 'State is fresh, session-bound, expiring, and single-use', 'Redirect URIs are exact and provider-specific', 'Verifier and tokens are absent from URLs, logs, analytics, and client storage where avoidable', 'Identity claims and token signatures are validated with maintained code', 'Local sessions rotate on login and use deliberate cookie attributes', 'Account linking requires an authenticated, explicit product action', 'Callback failures are observable without recording secrets', 'Runbooks cover provider outage, key rotation, leaked token, and revoked consent'],
+			},
+		],
+	},
 ];

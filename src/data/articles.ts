@@ -2323,4 +2323,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'debug-backend-performance-with-server-timing',
+		title: 'How to Debug Backend Performance with Server-Timing',
+		seoTitle: 'Debug Backend Performance with Server-Timing | PilotLab',
+		dek: 'A practical way to connect a slow browser experience to database, cache, and application timings—without guessing from a single Lighthouse score.',
+		published: '2026-09-06',
+		updated: '2026-09-06',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to debug backend performance with Server-Timing',
+		intro: 'Frontend performance tools can tell you that a page is slow, but not always which server operation made it slow. The Server-Timing response header gives your backend a small, browser-visible vocabulary for exposing useful measurements such as cache lookup, database time, and server rendering. Used carefully, it turns a vague performance complaint into a traceable investigation without shipping a full observability product to every browser.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — Server-Timing header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Server-Timing' },
+			{ label: 'MDN — PerformanceServerTiming', url: 'https://developer.mozilla.org/en-US/docs/Web/API/PerformanceServerTiming' },
+			{ label: 'web.dev — Optimize Largest Contentful Paint', url: 'https://web.dev/articles/optimize-lcp' },
+		],
+		sections: [
+			{
+				heading: 'Start with a performance question',
+				paragraphs: [
+					'Server-Timing is most useful when you already have a user-visible symptom and a route to investigate. Start with a question such as “Is the slow product page waiting on the database, the cache, or server rendering?” Record the route, request conditions, device or network context, and the browser metric that made the problem visible.',
+					'web.dev describes LCP as a loading metric affected by several stages, including time to first byte and the time needed to load and render the LCP resource. Server-Timing does not replace real-user data or a trace system; it adds backend context to the browser evidence so you can test a specific hypothesis.',
+				],
+				bullets: ['A reproducible URL or user journey', 'Access to server logs and the response headers', 'A browser with DevTools or a small PerformanceObserver snippet', 'A baseline for the route before changing the implementation', 'An explicit decision about which users may receive diagnostic timing data'],
+			},
+			{
+				heading: 'Instrument meaningful server boundaries',
+				paragraphs: [
+					'Choose a few boundaries that explain the request rather than timing every function. Good candidates are cache lookup, database query, template or API serialization, and an important downstream request. Measure with a monotonic timer on the server, keep the unit consistent, and emit a metric only when it helps answer an operational question.',
+					'A header can contain several comma-separated metrics. A compact response might be `Server-Timing: cache;desc="miss", db;dur=42.7, render;dur=8.1`. MDN documents a metric name plus optional `dur` and `desc` components. Keep names and descriptions short: every diagnostic value adds response-header bytes and becomes part of the browser-visible contract.',
+				],
+				bullets: ['Name metrics after stable stages, not individual record IDs', 'Use milliseconds consistently for `dur` values', 'Record cache status as a bounded label such as hit, miss, or bypass', 'Measure the critical path first; parallel work should not be summed blindly', 'Keep a request ID in normal logs so a browser observation can be correlated server-side'],
+			},
+			{
+				heading: 'Add the header at the response boundary',
+				paragraphs: [
+					'Build the metrics as the request completes and attach one `Server-Timing` header to the response. In a Node-style handler, capture timestamps around the operations you own, format the values with a bounded precision, and set the header before the response is committed. If a reverse proxy or framework also writes this header, define one merge policy so diagnostics are not silently overwritten.',
+					'Do not make the header depend on a successful page only. Include useful timings on representative error responses when they help diagnosis, but avoid returning internal details on authentication, payment, or other sensitive routes. A timing value should explain cost, not disclose SQL text, hostnames, customer identifiers, feature-flag state, or secret-bearing URLs.',
+				],
+				bullets: ['Emit only bounded numeric durations and controlled status labels', 'Use a feature flag, environment setting, or access policy for verbose diagnostics', 'Verify the header through the CDN or reverse proxy, not only locally', 'Do not expose query text, tenant names, IDs, or infrastructure topology', 'Ensure compression and caching layers preserve the intended response behavior'],
+			},
+			{
+				heading: 'Read the timings in DevTools and JavaScript',
+				paragraphs: [
+					'The quickest verification is browser DevTools: load the route, open the document or API request, and inspect the timing details and response headers. Compare the backend values with the request’s total duration and the page’s navigation or resource timing. If database time is low but the response still arrives late, investigate queueing, server work outside the measured stages, proxy buffering, transfer size, or client-side render delay.',
+					'For automated collection, the browser exposes server metrics through `PerformanceResourceTiming.serverTiming` and `PerformanceServerTiming` entries. MDN notes that this interface is same-origin by default and may require `Timing-Allow-Origin` for approved cross-origin access; it also requires a secure context in some browsers. Only add cross-origin exposure when the trust boundary and allowed origins are explicit.',
+				],
+				bullets: ['Confirm metric names and durations in the Network panel', 'Use `performance.getEntriesByType("navigation")` for document timing where appropriate', 'Use a PerformanceObserver when collecting entries as they arrive', 'Sample or aggregate browser diagnostics rather than sending every raw value', 'Join browser measurements with route family and release version, not personal data'],
+			},
+			{
+				heading: 'Turn one slow request into a fix plan',
+				paragraphs: [
+					'Use the breakdown to choose the next experiment. A high `db` duration points toward query plans, indexes, connection-pool wait, or data volume. A high cache duration or repeated miss points toward key construction, invalidation, or cache placement. Low backend timings with poor LCP suggest that the critical resource starts late, is too large, blocked by render work, or is being discovered only after client JavaScript runs.',
+					'Change one factor, then rerun the same route and compare distributions rather than celebrating one fast request. Keep the header while validating the fix, but do not confuse a diagnostic metric with a user-experience target. Field data remains the decision signal; Server-Timing explains the portion of that experience your server can see.',
+				],
+				bullets: ['Capture a baseline and a post-change sample under comparable conditions', 'Compare median and slow-tail behavior when the sample is large enough', 'Check cold-cache and warm-cache paths separately', 'Measure failures and authenticated paths without leaking private context', 'Remove metrics that no longer answer a live performance question'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'Server-Timing is a diagnostic interface, not distributed tracing. It covers the request stages you deliberately instrument and can be missing when a proxy, cache, worker, or third-party service ends the path. It also does not explain browser main-thread work, layout, image decoding, or a user’s network after the response leaves the server.',
+					'Before enabling it broadly, review privacy, caching, sampling, and retention. Confirm that public responses do not reveal sensitive internals, that timing headers do not vary a shared cache incorrectly, and that a header-generation failure cannot break the customer response. Keep a rollback switch and a short owner document so the instrumentation remains useful instead of becoming permanent noise.',
+				],
+				bullets: ['The route has a named performance question and baseline', 'Metrics describe stable stages and use bounded values', 'Sensitive routes receive no inappropriate internal detail', 'Browser access is same-origin or explicitly allowed with `Timing-Allow-Origin`', 'CDN, proxy, cache, and application behavior are verified together', 'Diagnostics are sampled, correlated, and access-controlled', 'Field metrics remain the source of truth for user experience', 'The team knows when to graduate from header timing to traces or profilers'],
+			},
+		],
+	},
 ];

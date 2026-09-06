@@ -2391,4 +2391,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-http-103-early-hints-web-performance',
+		title: 'How to Use HTTP 103 Early Hints for Web Performance',
+		seoTitle: 'HTTP 103 Early Hints for Web Performance | PilotLab',
+		dek: 'A practical guide to sending preload hints before a final response, measuring whether they help, and avoiding cache or proxy behavior that makes them noise.',
+		published: '2026-09-06',
+		updated: '2026-09-06',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to use HTTP 103 Early Hints for web performance',
+		intro: 'HTTP 103 Early Hints lets a server send preliminary response headers while it is still preparing the final response. That can give a browser an earlier opportunity to discover a critical stylesheet or other resource, but it is not a magic faster-page switch: the hint must match the eventual document, the delivery path must preserve it, and the browser still needs time to fetch and use the resource. This tutorial shows where the technique fits, how to roll it out safely, and how to prove whether it improves a real route.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'IETF RFC 8297 — An HTTP Status Code for Indicating Hints', url: 'https://www.rfc-editor.org/rfc/rfc8297' },
+			{ label: 'MDN — 103 Early Hints', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/103' },
+			{ label: 'web.dev — Early Hints', url: 'https://web.dev/articles/early-hints' },
+			{ label: 'MDN — Link header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Link' },
+		],
+		sections: [
+			{
+				heading: 'Start with a measurable loading bottleneck',
+				paragraphs: [
+					'Early Hints is useful when the server knows a critical dependency before it can finish the final response. A common case is a dynamic HTML route that spends time querying data or rendering while the browser already needs the page stylesheet. The server can send a 103 response with a Link header, then later send the normal final response.',
+					'Do not begin by adding preload to every asset. Pick one route, identify its largest or render-blocking resource, and record a baseline with field or controlled browser measurements. web.dev describes Early Hints as a way to let the browser act on hints while the origin is preparing the final response; that benefit depends on enough server preparation time and a resource that is genuinely on the critical path.',
+				],
+				bullets: ['Choose a dynamic route with measurable server wait time', 'Identify the exact resource URL and its relationship to the final HTML', 'Record time to first byte, LCP, resource start time, and final response status', 'Confirm the asset is cacheable and can be fetched without credentials', 'Define a rollback switch before changing response headers'],
+			},
+			{
+				heading: 'Send a conservative 103 response',
+				paragraphs: [
+					'RFC 8297 defines 103 Early Hints as an informational response that can carry header fields likely to appear in the final response. The usual implementation sends a Link header such as `Link: </assets/app.css>; rel=preload; as=style`, then continues with the final 200 response. The hint is advisory: the browser may ignore it, and the final response remains authoritative.',
+					'Only hint resources that the final document will actually use. A stale or incorrect preload wastes connection and cache capacity, and an `as` value that does not match the eventual request can create a second fetch or a browser warning. Keep the first rollout to one or two critical assets, use absolute or correctly scoped URLs, and make sure your HTML still contains the normal stylesheet or script reference.',
+				],
+				bullets: ['Use status 103 only for preliminary hints, not as the final application response', 'Match Link URL, rel, and as to the eventual resource request', 'Do not hint personalized, private, or user-specific assets', 'Keep the final response headers and body correct if the 103 is dropped', 'Avoid preload for resources that are merely likely rather than critical'],
+			},
+			{
+				heading: 'Put the behavior at the right boundary',
+				paragraphs: [
+					'An application can generate the hint when it knows the route and critical asset, but a reverse proxy, CDN, or hosting platform may buffer, remove, or rewrite informational responses. Verify the whole path from client to origin. A local Node response that emits 103 does not prove that the public HTTPS endpoint delivers it before the final response.',
+					'Prefer a stable asset URL with a content hash and a cache policy appropriate to the resource. If a deployment changes the stylesheet filename, an old hint should not point at a missing or incompatible asset. If the edge already performs Early Hints or link processing, choose one owner and document the merge rule instead of emitting duplicate hints from several layers.',
+				],
+				bullets: ['Test through the CDN, reverse proxy, TLS terminator, and application together', 'Inspect whether the edge forwards informational responses or synthesizes its own', 'Use immutable or versioned critical asset URLs where appropriate', 'Do not expose internal origins, tenant paths, or private query parameters in Link values', 'Make one layer responsible for deduplication and policy'],
+			},
+			{
+				heading: 'Account for cache, connection, and browser trade-offs',
+				paragraphs: [
+					'Early Hints is most promising on a cold navigation where the browser has not discovered the critical asset and the server has meaningful work to do before the final response. It may add little on a warm cache, a static route, or a route whose bottleneck is client JavaScript, image decoding, or main-thread work. It can also be counterproductive if the hinted asset competes with a more important request.',
+					'Treat the 103 as a performance optimization, not a correctness or security mechanism. Do not use it to bypass authorization or to preload a resource that the final response might not permit. Preserve ordinary cache and content-negotiation rules, and check that shared caches do not reuse a hint for a representation with different language, tenant, or device requirements.',
+				],
+				bullets: ['Compare cold and warm navigations separately', 'Measure bandwidth and connection contention, not only LCP', 'Keep hints invariant across the cache key or vary them deliberately', 'Do not preload private or authorization-dependent responses', 'Remove a hint when it increases bytes or delays a higher-priority resource'],
+			},
+			{
+				heading: 'Verify the wire behavior and user outcome',
+				paragraphs: [
+					'Use browser DevTools and a wire-level client to confirm that the 103 arrives before the final response and contains the expected Link header. Then check the resource timing: the critical asset should begin earlier, not merely appear with a different label. Repeat over the production proxy path and on a representative slower connection, because a fast local network can hide the only interval in which Early Hints could help.',
+					'Compare a controlled treatment route with the unchanged baseline. Look at distributions rather than one run: time to first byte, resource request start, LCP, total bytes, error rates, and any duplicate or unused preloads. If the resource starts earlier but LCP does not move, the bottleneck is elsewhere. Keep the change only when the improved user signal outweighs its bandwidth and operational cost.',
+				],
+				bullets: ['Confirm status 103 and Link on the public response path', 'Verify the browser begins the intended fetch before final HTML arrives', 'Test mobile and slower network conditions as well as desktop', 'Check for duplicate requests, preload warnings, and unused bytes', 'Compare field or repeatable lab distributions before and after rollout'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'HTTP 103 is optional and not universally useful. A proxy may not support it, a browser may ignore it, or the server may not know the right resource early enough. The final response must therefore remain complete and correct without the hint. Keep the optimization behind a configuration switch, monitor it after asset and template changes, and remove it if the critical path changes.',
+					'The best outcome is not “we send 103.” It is evidence that a specific route discovers a critical dependency earlier without violating cache, privacy, or delivery assumptions. If the route is still slow after that experiment, return to the measured bottleneck: server work, asset priority, transfer size, client execution, or the network between the user and the edge.',
+				],
+				bullets: ['Final HTML works when all informational responses are discarded', 'Hints match the final representation and contain no sensitive data', 'The delivery path preserves or intentionally owns 103 behavior', 'Asset URLs, cache keys, and content negotiation are compatible', 'Metrics include resource start, LCP, bytes, warnings, and errors', 'A feature switch can disable hints without a code rollback', 'The team reviews hints whenever templates, bundles, or proxy rules change'],
+			},
+		],
+	},
 ];

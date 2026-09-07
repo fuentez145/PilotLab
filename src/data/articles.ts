@@ -2392,6 +2392,83 @@ export const articles: Article[] = [
 		],
 	},
 	{
+		slug: 'add-etag-conditional-requests-node-api',
+		title: 'How to Add ETag Conditional Requests to a Node.js API',
+		seoTitle: 'Add ETag Conditional Requests to a Node.js API | PilotLab',
+		dek: 'Reduce repeated JSON transfers with HTTP validators: generate stable ETags, return 304 safely, and test cache behavior without confusing freshness with correctness.',
+		published: '2026-09-07',
+		updated: '2026-09-07',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to add ETag conditional requests to a Node.js API',
+		intro: 'If a client repeatedly asks for the same JSON resource, sending the full representation every time wastes bandwidth and work. An ETag gives that representation an opaque version identifier: the client sends it back with `If-None-Match`, and the API can return `304 Not Modified` when the representation is still equivalent. This tutorial shows a provider-neutral Node.js pattern, the cache and privacy decisions around it, and the tests that prove the optimization is correct.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9110 — HTTP Semantics, ETag', url: 'https://www.rfc-editor.org/rfc/rfc9110#field.etag' },
+			{ label: 'IETF RFC 9110 — Conditional Requests', url: 'https://www.rfc-editor.org/rfc/rfc9110#conditional.requests' },
+			{ label: 'MDN — ETag header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag' },
+			{ label: 'MDN — If-None-Match header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-None-Match' },
+			{ label: 'Node.js — crypto.createHash()', url: 'https://nodejs.org/api/crypto.html#cryptocreatehashalgorithm-options' },
+		],
+		sections: [
+			{
+				heading: 'Start with a resource that has a clear representation',
+				paragraphs: [
+					'ETags validate a representation of a resource; they do not decide whether a user is allowed to see it. Choose a stable GET or HEAD endpoint whose response can be serialized consistently, such as a public catalog, a tenant-scoped settings document, or a read-only API response. Perform authentication and authorization before generating or comparing the validator.',
+					'You need an API route, a deterministic serializer, and a client or command-line tool that can resend response headers. Decide whether the representation varies by language, encoding, tenant, user, or permission. If it varies, the cache key and the ETag must not let one representation be reused for another. Add `Vary` for request headers that affect the selected representation, and do not use a shared cache for private data without an explicit design.',
+				],
+				bullets: ['A successful GET response with a defined media type', 'Stable JSON serialization or a canonical byte representation', 'Authentication and authorization that run before cache validation', 'A client that stores the ETag and sends If-None-Match', 'A way to inspect headers through the real proxy or CDN path'],
+			},
+			{
+				heading: 'Generate an ETag from the bytes you send',
+				paragraphs: [
+					'The safest simple implementation hashes the exact response bytes. Serialize the authorized payload once, encode it as UTF-8, and create a quoted validator from a cryptographic digest. Node’s `crypto.createHash()` supports this pattern. The important invariant is not the particular hash algorithm; it is that identical bytes produce the same tag and any changed representation produces a new tag.',
+					'A minimal helper looks like this: `const body = Buffer.from(JSON.stringify(payload)); const etag = `"${createHash("sha256").update(body).digest("base64url")}"`;`. In real code, keep the nested template-string quoting readable and set `Content-Type: application/json; charset=utf-8` alongside the body. If property order, whitespace, timestamps, or random IDs change on every request, the hash will also change on every request and the validator will not save work.',
+				],
+				bullets: ['Hash the final bytes, not an object before serialization', 'Use the required quoted ETag syntax; do not expose a database secret or internal revision as the tag', 'Avoid volatile fields when they are not part of the client-visible representation', 'Generate the representation only after the request is authorized', 'Use a revision number instead of hashing only when its change semantics are rigorously correct'],
+			},
+			{
+				heading: 'Implement If-None-Match before writing the body',
+				paragraphs: [
+					'For a GET or HEAD request, compare the request’s `If-None-Match` value with the current ETag. If the condition matches, return `304 Not Modified` with no response body. RFC 9110 requires the response to retain header fields that would have accompanied the 200 response, including the current ETag and relevant cache headers. Otherwise return the normal 200 response with the exact bytes used to calculate the tag.',
+					'Do not treat the header as a trusted single string that must equal one exact value. Clients can send a list of entity tags, and a wildcard is meaningful in conditional request processing. Use a maintained HTTP utility or implement the comparison rules deliberately, including weak comparison for `If-None-Match` on retrieval requests. Never skip authorization because a client presents a matching validator: a 304 still confirms that the caller may observe the resource’s current representation.',
+				],
+				bullets: ['Authenticate and authorize before deciding between 200 and 304', 'Set ETag and cache headers on both 200 and 304 responses', 'Send no body for 304 and ensure the framework does not append one', 'Handle multiple tags and the `*` form according to HTTP semantics', 'Keep HEAD consistent with GET while omitting the body'],
+			},
+			{
+				heading: 'Separate validation from freshness',
+				paragraphs: [
+					'An ETag answers “is the cached representation still equivalent?” It does not answer “may the client use it without contacting the server?” That second decision belongs to cache directives such as `Cache-Control`. You can use validators with a short freshness lifetime, `no-cache` revalidation, or private caching, depending on the resource and privacy model. `no-cache` means revalidate before reuse; it does not mean “never store.”',
+					'For a user-specific response, a conservative starting point is `Cache-Control: private, no-cache`. The browser may retain the response, but it must revalidate before using it, and an intermediary should not serve it to another user. For truly public immutable assets, a long-lived cache policy may be appropriate, but a private API response containing account or tenant data should not inherit that policy by accident. Review cookies, authorization headers, `Vary`, and CDN behavior together.',
+				],
+				bullets: ['Use `private` for representations that must not be shared between users', 'Use `no-cache` when stored responses must revalidate before reuse', 'Choose public caching only after reviewing authorization and representation variance', 'Add `Vary` for headers that select different representations', 'Do not claim bandwidth savings without measuring 304 rates and response bytes'],
+			},
+			{
+				heading: 'Use validators for safe updates too',
+				paragraphs: [
+					'The same ETag can protect an edit from overwriting someone else’s newer version. Return the current tag on a GET, then require the client to send it in `If-Match` with a PUT or PATCH. If the stored representation no longer matches, return `412 Precondition Failed` instead of silently accepting a lost update. This is a separate operation from `If-None-Match` on GET, but the shared version boundary is valuable.',
+					'Keep the check and write atomic. A route that reads the version, waits, and then updates without a database condition can still lose a concurrent edit. Express the precondition in the database update where possible, for example “update this row where revision equals the client revision,” then return the new representation and ETag. If the update affects zero rows, report a conflict and let the client fetch the current state.',
+				],
+			},
+			{
+				heading: 'Verify the wire behavior and failure modes',
+				paragraphs: [
+					'Test the complete request sequence with a real endpoint. First request the resource and save its ETag. Request it again with `If-None-Match` and assert 304, an empty body, and the same validator. Change the underlying data, repeat the conditional request, and assert 200 with a new body and tag. Then test authorization boundaries: a tag learned by one tenant or user must not reveal another representation through a shared cache or a timing shortcut.',
+					'Also test serialization determinism, multiple request tags, HEAD, compression, proxy caching, and a response error before headers are committed. A content hash may be calculated before compression; that is usually correct when the representation semantics are unchanged, but verify your framework’s ETag and compression ordering so you do not emit conflicting validators. Monitor 200 versus 304 counts, response bytes, cache hits, authorization failures, and unexpected tag churn.',
+				],
+				bullets: ['First GET returns 200, a body, ETag, and intended Cache-Control', 'Matching If-None-Match returns 304 with no body', 'Non-matching or stale tags return 200 with the current body', 'A changed representation produces a different ETag', 'A client from another tenant cannot use a tag to bypass authorization', 'PUT or PATCH with a stale If-Match returns 412 and changes nothing', 'The public proxy path preserves the intended headers and cache scope'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'ETags reduce transfer and serialization work only when the client revalidates and the representation remains stable. They do not replace cache policy, authorization, compression, pagination, database tuning, or response design. A dynamic endpoint that embeds a request timestamp will have a new tag every time; a resource that is personalized must be scoped correctly; and a proxy may apply its own caching rules.',
+					'Roll this out to one read-heavy route, compare conditional-request behavior with the baseline, and keep the implementation behind a small response helper. At PilotLab, we treat the validator, cache directives, authorization boundary, and tests as one API contract. That makes the optimization explainable and keeps a future CDN or client change from turning a bandwidth optimization into a data leak.',
+				],
+				bullets: ['The ETag is calculated from the authorized representation actually sent', 'Conditional evaluation never bypasses authentication or authorization', '200 and 304 responses have compatible headers and no accidental body on 304', 'Cache-Control and Vary match the privacy and representation model', 'Update routes use If-Match and atomic version checks where lost updates matter', 'Metrics show tag churn, 304 rate, bytes saved, and cache-scope errors', 'A proxy/CDN integration test runs after changes to headers or compression', 'The team can disable the optimization without changing resource correctness'],
+			},
+		],
+	},
+	{
 		slug: 'use-http-103-early-hints-web-performance',
 		title: 'How to Use HTTP 103 Early Hints for Web Performance',
 		seoTitle: 'HTTP 103 Early Hints for Web Performance | PilotLab',

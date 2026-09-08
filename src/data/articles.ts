@@ -2537,4 +2537,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-idempotency-keys-nodejs-api',
+		title: 'How to Design Idempotency Keys for a Node.js API',
+		seoTitle: 'Design Idempotency Keys for a Node.js API | PilotLab',
+		dek: 'Prevent duplicate orders and charges when clients retry after timeouts: define the key scope, persist the result atomically, and test ambiguous failures.',
+		published: '2026-09-08',
+		updated: '2026-09-08',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to design idempotency keys for a Node.js API',
+		intro: 'A client can send the same request twice without intending to create two outcomes. A mobile connection may drop after the server commits, a proxy may retry, or a user may press the button again because the first response is slow. Idempotency keys let a Node.js API recognize retries of one logical operation and return one consistent outcome instead of creating duplicate orders, bookings, or charges. This guide focuses on the contract and failure windows that make the pattern safe.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Stripe — Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' },
+			{ label: 'AWS Builders’ Library — Making retries safe with idempotent APIs', url: 'https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/' },
+			{ label: 'IETF RFC 9110 — Idempotent methods', url: 'https://www.rfc-editor.org/rfc/rfc9110#idempotent.methods' },
+		],
+		sections: [
+			{
+				heading: 'Decide which operations need a key',
+				paragraphs: [
+					'HTTP defines GET, HEAD, PUT, and DELETE as idempotent in their intended semantics, but a product operation can still have side effects behind a POST. Creating an order, reserving inventory, sending a message, or starting a payment is a candidate for an application-level idempotency key when the caller may safely retry the same intent.',
+					'Do not add a key as a decorative header. Define the logical operation, its owner, the resources it may change, and how long a retry should be recognized. A key should identify one client intent, not one browser tab forever. Make the retention window long enough to cover client retries, queue delays, and support replay, then document what happens after it expires.',
+				],
+				bullets: ['Use keys for retriable operations with non-idempotent business effects', 'Require the key on high-risk writes rather than accepting an optional best effort', 'Scope keys to an authenticated tenant, principal, and operation type', 'Set a retention period based on real retry and reconciliation windows', 'Keep ordinary validation errors separate from duplicate detection'],
+			},
+			{
+				heading: 'Validate the key at the API boundary',
+				paragraphs: [
+					'Accept the key in a documented request header such as `Idempotency-Key`, then validate its length and character policy before doing business work. The server must derive the tenant and caller from verified authentication; never let a client-supplied tenant identifier decide whether two requests share a key. A key is an identifier, not a secret, but it should still be treated as untrusted input and kept out of URLs.',
+					'Bind the key to the operation’s intent. Store a request fingerprint made from the normalized fields that affect the outcome, or store an equivalent canonical representation. If the same key arrives with a materially different payload, return a conflict rather than silently returning the first request’s result or applying a second intent. Stripe documents this general pattern by associating a key with the first request and rejecting reuse with different parameters.',
+				],
+				bullets: ['Reject missing, oversized, or malformed keys consistently', 'Derive scope from authenticated identity and route semantics', 'Store a normalized request fingerprint or canonical intent', 'Return a conflict when a key is reused with different parameters', 'Never use raw request bodies containing secrets as an unredacted log field'],
+			},
+			{
+				heading: 'Persist the record with the business write',
+				paragraphs: [
+					'Create an idempotency record with a database-enforced unique constraint over the key scope, operation, and key. The record should contain a processing state, request fingerprint, response status, safe response body or resource reference, and timestamps. For an operation that writes business data, create the record and the business change in one transaction when your database model allows it.',
+					'Two requests can race. A check-then-insert sequence is not enough because both requests can observe no record before either inserts. Let the unique constraint choose one owner, then make the losing request wait for or read the committed result. Do not return the winner’s result while its transaction is still capable of rolling back; the replayed response must describe durable state.',
+				],
+				bullets: ['Enforce uniqueness in the database, not only in application code', 'Store processing, succeeded, and failed states with timestamps', 'Commit the idempotency record and business effect atomically where possible', 'Make a concurrent duplicate wait, retry, or return an explicit in-progress response', 'Keep the response replayable without retaining unnecessary personal data'],
+			},
+			{
+				heading: 'Choose a policy for failures and in-progress requests',
+				paragraphs: [
+					'Not every failure should be replayed forever. A validation error can be recorded as the result for that key, while a transient database or provider failure may leave the operation retryable. Decide whether the key is reusable after a permanent client error, how long an in-progress record may remain leased, and how an operator repairs a record after a process crash.',
+					'An ambiguous timeout is the important case: the server or provider may have committed even though the client saw no response. The retry must use the same key and return the original outcome or a status that allows reconciliation. Never generate a new key automatically for a retry of the same logical operation; that converts uncertainty into a possible duplicate.',
+				],
+				bullets: ['Retry transport failures only with the same logical key', 'Distinguish permanent validation failure from transient infrastructure failure', 'Use a lease or recovery state for a process that dies mid-operation', 'Return a safe in-progress status when the original operation is still running', 'Provide a status or reconciliation path for ambiguous external writes'],
+			},
+			{
+				heading: 'Keep external side effects idempotent too',
+				paragraphs: [
+					'An API-level record prevents duplicate entry into your handler, but a crash can still occur after an external provider accepts a request and before your database records the result. Pass a stable provider-supported idempotency key downstream when available. For providers without that feature, use a durable operation record, a unique business reference, or a reconciliation query before repeating the call.',
+					'For multi-step workflows, do not treat one top-level key as proof that every side effect is exactly once. Give each durable step an operation identity, record the state transition, and make retries safe. A transactional outbox can publish follow-up events, while workers handle delivery at least once. The objective is one logical business outcome, not a promise that every network packet is sent only once.',
+				],
+			},
+			{
+				heading: 'Test races, replays, and retention',
+				paragraphs: [
+					'Exercise the wire contract with a real API server. Send a request, drop the connection after the server begins work, then retry with the same key. Send two identical requests concurrently and assert one business record and one durable outcome. Reuse the key with a changed amount or tenant and expect a conflict. Force a process crash after the provider call and verify that recovery does not create a second effect.',
+					'Also test retention and privacy. After the documented expiry, decide whether the same key starts a new operation or is rejected as too old. Verify that logs and metrics contain a safe key fingerprint, not payment data or full payloads. Monitor duplicate attempts, in-progress age, conflicts, replay responses, provider reconciliation, and records approaching retention cleanup.',
+				],
+				bullets: ['Concurrent identical requests produce one logical effect', 'A retry after a lost response returns the original outcome or a safe status', 'A changed payload with the same key is rejected', 'A key from another tenant cannot address or replay a result', 'A crash after an external commit is recovered without duplication', 'Expired records follow the documented retention policy', 'Metrics expose conflicts, stuck operations, replays, and reconciliation failures'],
+			},
+		],
+	},
 ];

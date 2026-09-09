@@ -2604,4 +2604,74 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'implement-web-push-notifications-web-app',
+		title: 'How to Implement Web Push Notifications in a Web App',
+		seoTitle: 'Implement Web Push Notifications in a Web App | PilotLab',
+		dek: 'A practical Web Push design for opt-in notifications: register a service worker, protect subscriptions, send through a server, and handle revocation without spamming users.',
+		published: '2026-09-09',
+		updated: '2026-09-09',
+		readTime: '11 min read',
+		category: 'Web applications',
+		keyword: 'how to implement web push notifications in a web app',
+		intro: 'Web Push can bring a useful event back to a user after they leave a tab, but it is not a browser version of an email blast. The browser grants a subscription, the service worker receives the message, and your server must treat the subscription endpoint as sensitive capability data. This tutorial shows the smallest production-minded design: explicit opt-in, durable subscription records, authenticated sending, graceful expiry, and a notification experience people can control.',
+		relatedService: { label: 'Web applications and product development', href: '/services/web-applications' },
+		sources: [
+			{ label: 'MDN — Push API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Push_API' },
+			{ label: 'MDN — Service Worker API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API' },
+			{ label: 'MDN — Notifications API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API' },
+			{ label: 'IETF RFC 8030 — Generic Event Delivery Using HTTP Push', url: 'https://www.rfc-editor.org/rfc/rfc8030' },
+			{ label: 'IETF RFC 8292 — VAPID for Web Push', url: 'https://www.rfc-editor.org/rfc/rfc8292' },
+		],
+		sections: [
+			{
+				heading: 'Define a notification people asked for',
+				paragraphs: [
+					'Push is appropriate for a timely event that a user has deliberately opted into: a completed export, a watched item changing, an assigned task, or a service incident. It is a poor default for every product update. Begin with the event, audience, urgency, quiet hours, and destination route. A user should be able to understand why the notification exists and turn that category off without disabling the whole account.',
+					'Push permission is a browser and operating-system decision, not a substitute for application authorization. Ask from a user action after explaining the benefit, and keep the preference in your own account model. Browsers can deny permission, revoke it, or restrict delivery, so the in-app activity feed or email path should remain the source of truth for important information.',
+				],
+				bullets: ['Use HTTPS in production; localhost is suitable for local development', 'Choose a service worker scope that covers the pages needing notifications', 'Ask for permission only after a clear, user-initiated explanation', 'Store per-category preferences separately from browser permission', 'Never use push as the only delivery path for critical records'],
+			},
+			{
+				heading: 'Register the service worker and create a subscription',
+				paragraphs: [
+					'MDN describes the service worker as the component that can receive push events when the web app is not in the foreground. Register it from the page, wait for it to become ready, and call PushManager.subscribe() only in response to the user’s opt-in action. The subscription contains an endpoint and encryption keys required by the application server; it is not just a boolean permission flag.',
+					'In a browser implementation, pass your public application-server key when the push service requires it, then send the resulting subscription to an authenticated server endpoint over HTTPS. Treat the request like any other account mutation: include CSRF protection where cookie authentication is used, validate the payload shape, and bind it to the authenticated user rather than trusting a user ID from the browser.',
+				],
+				bullets: ['Register the worker and verify its scope before subscribing', 'Use the browser’s supported PushManager and Notification APIs', 'Send endpoint, keys, browser metadata, and a user-controlled label to the server', 'Encrypt transport and protect the subscription endpoint at rest', 'Allow several devices or browsers per account rather than overwriting one record'],
+			},
+			{
+				heading: 'Persist subscriptions as revocable capability records',
+				paragraphs: [
+					'A PushSubscription endpoint is a capability URL: MDN warns that knowledge of it may be enough to send messages to the application. Store it like a credential, restrict access to it, and do not put it in analytics, logs, public profile responses, or client-visible debug screens. Keep the encryption keys with the subscription record and apply a retention policy for abandoned devices.',
+					'Use a table keyed by a stable subscription identifier or a normalized endpoint, with a foreign key to the authenticated account, timestamps, last-success time, and notification preferences. A single endpoint may be re-registered, so update the record atomically. Provide a delete or disable operation for logout, account settings, and a device-management screen. Do not assume that an unsubscribe button in one browser removes every device.',
+				],
+				bullets: ['Encrypt or tightly access-control endpoint and key material', 'Scope every lookup and send operation to the authenticated account or trusted worker', 'Keep created_at, last_used_at, failure_at, and disabled_at timestamps', 'Make registration idempotent when the same device reconnects', 'Delete or disable records after explicit unsubscribe or permanent delivery failure'],
+			},
+			{
+				heading: 'Send from a server-side worker with VAPID',
+				paragraphs: [
+					'Your application server should decide whether an event is eligible, load the user’s active subscriptions, and send through a maintained Web Push library or provider integration. Keep the private VAPID key in deployment secrets; RFC 8292 defines VAPID as a signed application-server identity that lets a push service attribute requests to one server. The browser’s subscription keys and the server’s VAPID identity solve different parts of the protocol and should not be mixed.',
+					'Do not send synchronously inside a customer-facing request if a notification can be queued. Create a durable notification job with a stable event ID, select recipients using current authorization and preferences, and let a worker send with bounded concurrency. A successful enqueue is not proof of display, and a delivery failure for one device should not prevent other subscriptions from being attempted.',
+				],
+				bullets: ['Keep VAPID private keys outside source control and application responses', 'Use a queue for fan-out, retries, and rate control', 'Give each notification event a stable ID for deduplication and audit', 'Bound payload size and include only what the notification needs', 'Avoid putting secrets, full customer records, or sensitive URLs in the payload'],
+			},
+			{
+				heading: 'Handle delivery failures and notification clicks',
+				paragraphs: [
+					'The send operation can fail because a subscription expired, the user revoked permission, the push service throttled the request, or your payload and credentials are invalid. Classify the response from the library or provider. Remove or disable a subscription only for a confirmed permanent failure; retry transient failures with bounded backoff and jitter. Record the reason and event ID without logging the full payload or capability URL.',
+					'The service worker should parse and validate the received data, show a persistent notification, and handle notificationclick by opening or focusing an allowlisted HTTPS route. Do not let arbitrary notification data become an open redirect. If the user clicks a notification after the underlying item has changed or disappeared, the destination should still explain the current state rather than assuming the event is fresh.',
+				],
+				bullets: ['Return quickly from the push event by waiting on the notification promise', 'Validate notification title, body, icon, tag, and target route', 'Use an allowlist or same-origin URL construction for click targets', 'Remove subscriptions only on a documented permanent failure', 'Deduplicate or collapse repeated events with a stable notification tag where appropriate'],
+			},
+			{
+				heading: 'Verify opt-in, privacy, and operational behavior',
+				paragraphs: [
+					'Test with a real HTTPS origin or localhost and at least two browser profiles. Grant permission, subscribe, send a signed test event, close the tab, and verify that the service worker displays the notification and opens the expected route. Then revoke permission, unsubscribe, remove the record, send a duplicate event, and simulate an expired endpoint. The important assertion is not merely that a notification appears; it is that the wrong account cannot send to or learn about another account’s subscription.',
+					'Monitor active subscriptions, sends by category, queue age, delivery failures by class, disabled records, click-through where consent permits, and notification frequency per user. Web Push does not guarantee that a person saw or clicked a notification. Keep an in-app history, document retention and consent, and make global and category-level controls easy to find. If the browser or operating system suppresses delivery, your product should fail quietly and preserve the underlying event.',
+				],
+				bullets: ['Subscription creation requires an authenticated, CSRF-protected request', 'A user cannot register or delete another account’s subscription', 'Duplicate sends produce one intended notification outcome', 'Permanent endpoint failures disable records without blocking other devices', 'Permission denial and browser incompatibility have a useful in-app fallback', 'Logs and metrics exclude endpoint URLs, encryption keys, payload secrets, and personal data', 'Rate limits, quiet hours, categories, and an emergency disable switch are documented'],
+			},
+		],
+	},
 ];

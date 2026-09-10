@@ -2674,4 +2674,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-server-sent-events-nodejs-api',
+		title: 'How to Build Server-Sent Events in a Node.js API',
+		seoTitle: 'Build Server-Sent Events in a Node.js API | PilotLab',
+		dek: 'A practical SSE design for live status updates: define the event contract, reconnect safely, keep proxies from buffering, and know when WebSockets are the better fit.',
+		published: '2026-09-10',
+		updated: '2026-09-10',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to build server-sent events in a Node.js API',
+		intro: 'Server-Sent Events (SSE) are a good fit when a browser needs a live, one-way stream from an API: export progress, build logs, notifications, or an operational feed. The browser opens one long-lived HTTP connection and the server sends named events as they happen. This tutorial covers the protocol contract, a Node.js implementation shape, reconnect behavior, proxy limits, and the point where a bidirectional protocol is a better choice.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'WHATWG HTML Standard — Server-sent events', url: 'https://html.spec.whatwg.org/multipage/server-sent-events.html' },
+			{ label: 'MDN — Using server-sent events', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events' },
+			{ label: 'MDN — EventSource', url: 'https://developer.mozilla.org/en-US/docs/Web/API/EventSource' },
+			{ label: 'Node.js Documentation — HTTP server and response APIs', url: 'https://nodejs.org/api/http.html' },
+		],
+		sections: [
+			{
+				heading: 'Choose SSE for the right interaction',
+				paragraphs: [
+					'SSE is an HTTP response that stays open and uses the `text/event-stream` media type. The server can send an event name, an ID, data lines, and a retry hint; the browser’s EventSource client parses the stream and reconnects after a disconnect. It is naturally suited to server-to-browser updates where the browser already knows how to start the operation with an ordinary POST or GET.',
+					'Use it for progress and status, not as a universal replacement for WebSockets. A dashboard feed, an AI job’s output, or a deployment log usually needs one-way delivery. A collaborative editor, multiplayer interaction, or client-driven control channel needs messages in both directions and should be evaluated as a WebSocket or another bidirectional protocol instead.',
+				],
+				bullets: ['A browser or compatible client that can keep an HTTP connection open', 'An operation or resource with a stable stream identity', 'A way to authorize the stream before it starts', 'A proxy and load balancer configuration you can inspect', 'A durable event or snapshot source for reconnects'],
+			},
+			{
+				heading: 'Define an event contract before opening the stream',
+				paragraphs: [
+					'Give each event a stable semantic name such as `job.progress`, `job.completed`, or `notification.created`. Keep the data payload small and versionable; send a resource ID and current state rather than repeating a large private record on every update. The client should be able to ignore an event it does not understand without breaking the connection.',
+					'Use event IDs when the client can recover missed updates. The browser sends the last received ID in `Last-Event-ID` during a reconnect. Your server must decide whether it can replay from that point. If the event history is unavailable or too old, send a fresh snapshot event and let the client replace local state rather than pretending that no updates were missed.',
+				],
+				bullets: ['Document event names, data schemas, and terminal states', 'Use monotonically ordered IDs within the stream’s replay scope', 'Make completion and failure explicit; do not rely on connection close', 'Send a snapshot or reset event when the replay window is gone', 'Keep tenant and user authorization attached to every stream lookup'],
+			},
+			{
+				heading: 'Implement the Node.js response as a controlled resource',
+				paragraphs: [
+					'At the route boundary, authenticate the caller, authorize the resource, and set `Content-Type: text/event-stream`, `Cache-Control: no-cache`, and a connection policy appropriate to your proxy. Write an initial comment or event after headers so the client and intermediary can observe that the stream is alive. Format each message as protocol lines ending with a blank line; a data value containing multiple lines needs one `data:` line per line.',
+					'Keep a registry of connected clients only for the process that owns them, and remove a client when its request or response closes. A minimal server can subscribe the response to an in-process event emitter, but that is not a distributed delivery system: another application instance cannot see that subscriber. For multiple replicas, publish through a shared broker or route a stream to the instance that owns the work, and still make the client able to recover from a disconnect.',
+				],
+				bullets: ['Flush headers and send a heartbeat comment on a bounded interval', 'Stop writing when the request is aborted or the response closes', 'Bound the number and lifetime of connections per account or tenant', 'Do not store unbounded event payloads in process memory', 'Treat backpressure and slow consumers as an explicit policy'],
+			},
+			{
+				heading: 'Reconnect without duplicating or losing state',
+				paragraphs: [
+					'EventSource reconnects automatically unless the server or client closes it. That convenience does not make delivery exactly once. A client may receive an event and lose the connection before updating its UI, then receive the same event again after reconnecting. Apply updates by event ID or resource version, and make terminal operations safe to repeat.',
+					'On the server, use `Last-Event-ID` only as a cursor after rechecking authorization and stream scope. Replay from a durable ordered log when possible. If replay is expensive, return a current snapshot first, then continue with events newer than the snapshot version. Avoid holding a database transaction open for the lifetime of the connection; read or subscribe in bounded operations.',
+				],
+				bullets: ['Treat reconnect as normal, not exceptional', 'Deduplicate by event ID or apply only newer resource versions', 'Bound replay size and time so one reconnect cannot overload the API', 'Close with a documented terminal event when the operation is finished', 'Use a retry delay that avoids synchronized reconnect storms'],
+			},
+			{
+				heading: 'Make the delivery path work through proxies',
+				paragraphs: [
+					'SSE fails in production when an intermediary buffers the response, imposes an idle timeout, or limits concurrent connections. Test the public HTTPS path, not only localhost. Confirm that the response is streamed progressively, that compression does not delay tiny messages, and that the reverse proxy’s read timeout exceeds the heartbeat interval. A heartbeat keeps an otherwise quiet connection observable, but it does not solve a proxy that rejects long-lived responses outright.',
+					'Browsers also limit the number of HTTP/1.1 connections per origin, while HTTP/2 changes the transport model and negotiates a stream limit. Keep one shared connection per page or application where possible and multiplex logical subscriptions in your own event names. Do not open one stream per table row. If the UI needs many independent updates, send a single authorized feed and filter it client-side only when the data boundary permits that design.',
+				],
+				bullets: ['Inspect time-to-first-event and inter-event gaps at the public endpoint', 'Set proxy buffering and read-timeout behavior intentionally', 'Use heartbeats shorter than every intermediary idle timeout', 'Measure open connections, bytes, reconnects, and slow consumers', 'Avoid exposing private event content through shared caches'],
+			},
+			{
+				heading: 'Verify failure modes and production limits',
+				paragraphs: [
+					'Test with a real browser and a command-line client that can show headers as they arrive. Start a job, confirm the stream receives progress and a terminal event, interrupt the connection, reconnect with the last event ID, and verify that the client converges on the correct state without duplicate UI effects. Repeat with an expired cursor, an unauthorized resource, a slow consumer, and a rolling deploy that removes the process holding the connection.',
+					'SSE is a delivery channel, not durable storage. The operation state and replay data belong in a database, queue, or event log with a retention policy. Monitor connection count and age, reconnect rate, replay failures, heartbeat failures, stream response errors, per-tenant usage, and memory. At PilotLab, we usually pair the stream with a durable job endpoint: POST creates the work, GET returns a snapshot, and SSE makes the current state feel live without making correctness depend on one open socket.',
+				],
+				bullets: ['A reconnect with Last-Event-ID replays or resets explicitly', 'A duplicate event does not duplicate a business action or visible result', 'Authorization is checked on initial connection and reconnect', 'A missing or expired resource returns a safe terminal response', 'Proxy buffering and idle timeout behavior are verified in staging', 'A process restart leaves enough durable state for the next instance', 'The team has a WebSocket or polling fallback decision for unsupported clients'],
+			},
+		],
+	},
 ];

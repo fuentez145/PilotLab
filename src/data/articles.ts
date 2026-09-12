@@ -2811,4 +2811,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-multi-tenant-audit-log',
+		title: 'How to Design an Audit Log for a Multi-Tenant SaaS',
+		seoTitle: 'How to Design a Multi-Tenant SaaS Audit Log | PilotLab',
+		dek: 'A practical design for recording who changed what, keeping tenant boundaries intact, and making audit history useful without turning logs into a liability.',
+		published: '2026-09-12',
+		updated: '2026-09-12',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to design a multi-tenant SaaS audit log',
+		intro: 'An audit log is not a dump of application logs. It is a durable record of meaningful actions: who performed them, what resource changed, when it happened, whether it succeeded, and how an operator can investigate the result. For a multi-tenant SaaS, the design must also make it difficult to cross tenant boundaries and safe to expose a filtered history to authorized users.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OWASP — Logging Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html' },
+			{ label: 'OpenTelemetry — Logging specification', url: 'https://opentelemetry.io/docs/specs/otel/logs/' },
+			{ label: 'IETF RFC 9562 — Universally Unique Identifiers', url: 'https://www.rfc-editor.org/rfc/rfc9562.html' },
+		],
+		sections: [
+			{
+				heading: 'Separate audit history from ordinary logs',
+				paragraphs: [
+					'Application logs answer questions such as “why did this request fail?” An audit log answers “which actor changed this customer record, and what was the outcome?” The two streams can share infrastructure, but they should have different event definitions, retention rules, access controls, and review expectations. OWASP notes that audit trails, security events, and operational logging often serve different purposes and should not be treated as one undifferentiated stream.',
+					'Start by listing actions that matter to customers, support, security, or compliance. Include changes to permissions, billing configuration, exports, API credentials, integrations, and records with business consequences. Do not log every getter or every debug message: noise makes important events harder to find and increases the amount of sensitive data you must protect.',
+				],
+				bullets: ['Define an event catalog before adding a generic logger', 'Use stable action names such as invoice.updated or member.role_changed', 'Record both successful and security-relevant failed attempts', 'Keep diagnostic stack traces and request bodies out of the audit record'],
+			},
+			{
+				heading: 'Give every event an explicit tenant and actor',
+				paragraphs: [
+					'Tenant scope should come from the authenticated request and the server-side resource being changed, never from a free-form tenant_id supplied by the browser. Resolve the actor, tenant, action, and target in the application service that authorizes the operation. Then write the audit event only after the authorization decision is known.',
+					'A useful minimum event has an immutable event ID, occurred-at timestamp, tenant ID, actor type and ID, action, target type and ID, outcome, request or correlation ID, and a small metadata object for safe context. Store the IDs that let support find the related business record, but avoid copying the entire before-and-after object into every row. For sensitive fields, record that a field changed or store a separately protected diff according to your retention policy.',
+				],
+				bullets: ['Derive tenant_id from verified identity plus the resource lookup', 'Represent human, service account, API key, and system actors distinctly', 'Use a server-generated event ID; UUIDs are suitable for distributed generation', 'Make action and outcome values finite and documented', 'Never accept actor identity, outcome, or authorization claims from client input'],
+			},
+			{
+				heading: 'Make the write reliable without changing the business result',
+				paragraphs: [
+					'The most important design choice is when the event is written. If a role change commits but the audit insert fails, the system has changed state without leaving the record users rely on. For changes in one database, write the business mutation and its audit row in the same transaction. The audit row should describe the final outcome, not a hopeful message emitted before the commit.',
+					'For work that crosses services, use an outbox or an equivalent durable handoff rather than trying to make a network call part of the database transaction. Commit the business change and an event payload together, then publish it from a worker with retries. Consumers must tolerate duplicates. If the audit pipeline is temporarily unavailable, make the failure policy explicit: block high-risk mutations, or accept the mutation only when a durable local record has been created.',
+				],
+				bullets: ['Single database: mutation and audit insert in one transaction', 'Multiple systems: transactional outbox plus a retrying publisher', 'Add a unique event ID so publishing can be retried safely', 'Monitor unpublished age, failed deliveries, and duplicate handling', 'Never claim an event was recorded when it exists only in process memory'],
+			},
+			{
+				heading: 'Design the read API as a security boundary',
+				paragraphs: [
+					'An audit log is only useful if an authorized person can search it, but the history endpoint is also a concentrated source of user, security, and business information. Apply tenant filtering in the data access layer, then apply role checks for which event categories a caller may view. Do not fetch a broad result set and filter tenant rows in application memory.',
+					'Use cursor pagination for large histories, stable ordering by occurred-at plus event ID, and bounded filters for action, actor, target, and time range. Return a redacted representation by default. A support tool that can reveal raw metadata, IP addresses, or field values should require a stronger permission and should itself create an audit event. Keep exports asynchronous and rate-limited rather than allowing an unbounded query to compete with customer traffic.',
+				],
+				bullets: ['Enforce tenant scope in every query path, including exports and admin tools', 'Use a stable cursor instead of offset pagination for changing histories', 'Default to redacted metadata and least-privilege event visibility', 'Audit searches, exports, privilege changes, and retention overrides', 'Return request IDs so an investigation can join API, trace, and audit records'],
+			},
+			{
+				heading: 'Protect the record and test the boundaries',
+				paragraphs: [
+					'OWASP warns that logs can expose personal data and secrets, be attacked through log injection, or consume resources under flooding. Treat audit data as sensitive application data: use a write-restricted database role or service, encrypt where appropriate, define retention and deletion rules, and prevent untrusted text from becoming ambiguous log structure. Do not put passwords, access tokens, full payment data, or raw authorization headers in events.',
+					'OpenTelemetry describes trace and span IDs as useful correlation fields for logs. Add those identifiers when available, but do not use correlation as proof of authorization or as a replacement for the tenant and actor fields. Your audit event must remain understandable when the trace has expired or a downstream service was not instrumented.',
+				],
+				bullets: ['Attempt reads as another tenant and expect zero rows', 'Attempt to alter or delete an existing event as a normal application user', 'Race two updates and verify each committed change has one event', 'Retry an outbox delivery and verify one logical event is shown', 'Inject delimiters and markup into names and verify safe rendering', 'Confirm retention, export, redaction, and access-review procedures in a runbook'],
+			},
+			{
+				heading: 'Production checklist',
+				paragraphs: [
+					'A good audit log is a product capability with an owner, not a table added at the end of a project. Begin with a narrow catalog of high-value actions, prove the tenant and authorization boundaries with tests, and expand only when an investigation or workflow demonstrates the need. Review the schema with security, support, and privacy stakeholders before promising customers a retention period or an immutable record.',
+				],
+				bullets: ['The event catalog, schema, retention, and visibility rules are documented', 'Tenant, actor, action, target, outcome, and event ID are server-controlled', 'Business mutations and audit writes have a defined consistency guarantee', 'Read paths, exports, and administrative access are tenant-scoped', 'Sensitive values are excluded or protected with a documented policy', 'Correlation IDs connect the event to request and trace evidence', 'Dashboards and alerts cover write failures, queue age, access anomalies, and storage growth'],
+			},
+		],
+	},
 ];

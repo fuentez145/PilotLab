@@ -2878,4 +2878,74 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'configure-nodejs-http-server-timeouts',
+		title: 'How to Configure HTTP Server Timeouts in Node.js',
+		seoTitle: 'Node.js HTTP Server Timeouts: A Practical Guide | PilotLab',
+		dek: 'Set request, header, socket, and keep-alive timeouts deliberately so slow clients do not hold connections forever—and healthy requests are not cut off by accident.',
+		published: '2026-09-13',
+		updated: '2026-09-13',
+		readTime: '9 min read',
+		category: 'API engineering',
+		keyword: 'how to configure Node.js HTTP server timeouts',
+		intro: 'A Node.js API can be perfectly healthy while its connections are not. A client may send headers slowly, upload a body indefinitely, leave a socket inactive, or wait on an upstream dependency long after the request has stopped being useful. Node exposes several timeout controls, but they protect different phases of an HTTP exchange. This guide maps those controls to failure modes and gives you a practical baseline to test and tune.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js HTTP API — Server timeouts', url: 'https://nodejs.org/api/http.html#serverheaderstimeout' },
+			{ label: 'Node.js HTTP API — server.requestTimeout', url: 'https://nodejs.org/api/http.html#serverrequesttimeout' },
+			{ label: 'Node.js HTTP API — server.setTimeout', url: 'https://nodejs.org/api/http.html#serversettimeoutmsecs-callback' },
+			{ label: 'RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110.html' },
+			{ label: 'MDN — 408 Request Timeout', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/408' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: name the phase you are protecting',
+				paragraphs: [
+					'You need a Node.js HTTP server, a repeatable way to send slow or stalled requests, and access to the reverse proxy or load balancer in front of it. Record the current values before changing anything. A timeout is only useful when it matches a failure mode and produces an observable result.',
+					'There are four controls worth separating. `headersTimeout` limits how long Node waits for complete request headers. `requestTimeout` limits how long it waits for the complete request, including the body. `server.timeout` is an inactivity timeout on an established socket. `keepAliveTimeout` governs idle time after a response while the connection is being kept available for another request. None of these is a general deadline for all application work.',
+				],
+				bullets: ['Headers: protect the parser from a client that never finishes headers', 'Request body: bound uploads and slow request transmission', 'Socket inactivity: catch connections that stop making progress', 'Keep-alive: avoid retaining idle connections longer than the edge expects', 'Application work: cancel or bound upstream calls separately'],
+			},
+			{
+				heading: 'Set the server-level baseline explicitly',
+				paragraphs: [
+					'In Node’s current HTTP documentation, `requestTimeout` defaults to 300000 milliseconds and `headersTimeout` defaults to the smaller of `requestTimeout` and 60000 milliseconds. `server.timeout` defaults to zero, meaning no socket inactivity timeout, while `keepAliveTimeout` defaults to 5000 milliseconds. Defaults also change across Node releases, so production code should make the policy visible rather than relying on a runtime default.',
+					'A practical starting point for a typical JSON API is a finite header timeout, a finite request timeout, a short keep-alive timeout, and an inactivity timeout chosen for the slowest legitimate request body. Set these on the server creation options or immediately after creating the server, and keep the values in configuration so different routes can be treated deliberately. Do not copy these numbers into every service without measuring uploads, proxies, and client behavior.',
+				],
+				bullets: ['Use milliseconds consistently and name configuration values by phase', 'Keep header timeout below the point where a connection becomes an unbounded resource', 'Allow a larger request timeout only for endpoints that genuinely receive larger or slower bodies', 'Make the edge timeout longer than the application timeout when the app should fail first', 'Document the Node version whose defaults and behavior you tested'],
+			},
+			{
+				heading: 'Do not confuse inactivity with a request deadline',
+				paragraphs: [
+					'`server.setTimeout()` and the `server.timeout` property measure socket inactivity. They do not mean “finish this handler within N milliseconds.” A client that continues sending bytes can avoid an inactivity timeout, and an application handler can continue consuming CPU or waiting on a dependency after the socket has activity. Node’s documentation also notes that once you install a timeout listener, your code is responsible for handling the timed-out socket.',
+					'For a real application deadline, create a separate cancellation budget around downstream work. Pass an `AbortSignal` to supported fetch or database operations, stop work when the request is gone, and ensure the handler cannot write a second response after the deadline. A timeout response is not a rollback: if a payment, job submission, or other side effect has already succeeded, the client may retry and create a duplicate unless that operation is idempotent.',
+				],
+				bullets: ['Socket timeout: no bytes arrive during the configured interval', 'Request timeout: the request has not been received completely', 'Application deadline: the operation must finish or be cancelled by a policy', 'Dependency timeout: one outbound call gets only its allotted share of the budget'],
+			},
+			{
+				heading: 'Coordinate Node with the reverse proxy',
+				paragraphs: [
+					'Your public request usually crosses more than one timeout boundary: CDN, load balancer, reverse proxy, Node, and downstream services. If the proxy gives up first, Node may continue doing work for a client that is no longer listening. If Node gives up first but the proxy waits, the proxy may turn a clean application response into its own gateway error. Map the chain and choose which layer owns the user-visible deadline.',
+					'Use a small margin between layers rather than identical values. For example, an application deadline can expire before the proxy’s upstream timeout, while the proxy’s idle timeout can exceed the server keep-alive setting enough to avoid avoidable connection churn. Verify the actual deployed configuration; a setting in source control does not prove the container, ingress, or managed load balancer uses it.',
+				],
+				bullets: ['Write down connect, header, body, idle, upstream, and total timeouts for each hop', 'Keep long-running work asynchronous instead of extending every HTTP timeout', 'Return a stable error shape and request ID when the application owns the timeout', 'Monitor requests that reach each timeout separately', 'Treat streaming and file-upload routes as distinct profiles'],
+			},
+			{
+				heading: 'Test slow clients and failure paths',
+				paragraphs: [
+					'Do not verify timeout configuration only with a fast curl request. Use a test client or a small script to open a connection, send one header at a time, pause between body chunks, leave a request idle, and hold a keep-alive connection without sending another request. Confirm whether Node sends a 408, closes the socket, or emits a timeout event according to the specific setting and your handler.',
+					'Also test a client disconnect during a slow downstream call, an upstream call that exceeds its budget, a request that reaches the limit just before completion, and two requests sharing one keep-alive connection. Capture server logs with request ID, route, elapsed time, timeout class, bytes received, and whether downstream work was cancelled. Never log request bodies or authorization headers merely to diagnose timing.',
+				],
+				bullets: ['Slow headers: expect the request listener not to run when the header limit expires', 'Slow body: verify partial uploads do not remain active indefinitely', 'Idle socket: verify the selected close or error behavior', 'Client disconnect: verify downstream work is cancelled or safely detached', 'Boundary timing: run tests slightly below, at, and above each threshold'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'HTTP 408 means the server did not receive a complete request in time; it is different from an application dependency timing out after the request was received. MDN notes that servers commonly close the connection with 408, and Node documents that its request and header timeouts respond with 408 before forwarding the request to the listener. Choose the status and response shape based on the phase that failed, and make clients retry only operations that are safe to retry.',
+					'The most common mistake is selecting one large timeout to make errors disappear. That preserves stuck work, increases concurrency pressure, and makes incidents harder to diagnose. Start with explicit finite limits, instrument each class, and tune from observed legitimate traffic. If an endpoint needs minutes, move the work behind a job API and let the HTTP request acknowledge creation of the job instead of holding a socket open.',
+				],
+				bullets: ['Timeout values are explicit, versioned, and reviewed with proxy configuration', 'Slow-client, disconnect, and downstream-cancellation tests run in CI or a repeatable test job', 'Timeout metrics distinguish headers, body, socket, keep-alive, application, and dependency failures', 'Large uploads and streaming routes have separate limits and resource controls', 'Side effects use idempotency keys or a durable job model before clients are encouraged to retry', 'Runbooks explain how to identify the timeout owner from logs and response headers'],
+			},
+		],
+	},
 ];

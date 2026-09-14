@@ -2948,4 +2948,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'graceful-shutdown-nodejs-http-api',
+		title: 'How to Implement Graceful Shutdown in a Node.js HTTP API',
+		seoTitle: 'Graceful Shutdown in Node.js HTTP APIs | PilotLab',
+		dek: 'Stop accepting new traffic, finish safe in-flight work, close dependencies, and exit before the platform force-kills your process.',
+		published: '2026-09-14',
+		updated: '2026-09-14',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to implement graceful shutdown in a Node.js HTTP API',
+		intro: 'A deployment is not complete when the replacement process starts. The old process also needs a safe exit path. Without one, a Node.js API can drop in-flight requests, leave database connections open, duplicate background work, or make a load balancer send traffic to a process that is already winding down. This tutorial builds a small shutdown state machine and shows how to verify it under the failures that matter.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js HTTP API — server.close()', url: 'https://nodejs.org/api/http.html#serverclosecallback' },
+			{ label: 'Node.js Process API — signal events', url: 'https://nodejs.org/api/process.html#signal-events' },
+			{ label: 'Kubernetes — Pod termination lifecycle', url: 'https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination' },
+			{ label: 'MDN — 503 Service Unavailable', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define what “safe to stop” means',
+				paragraphs: [
+					'You need a Node.js HTTP server, a process manager or container runtime that delivers termination signals, a health or readiness endpoint, and at least one dependency such as a database pool or queue consumer. Write down which work may finish during shutdown and which work must be abandoned and retried. A user-facing request, a queue message, and a metrics flush do not have the same safety rules.',
+					'Node exposes signal events through the process object, while the HTTP server exposes a close operation. Kubernetes also gives a terminating Pod a defined lifecycle and a grace period, but the platform deadline is not a substitute for application cleanup. Your process must stop advertising readiness, stop accepting new work, drain what is safe, close resources, and exit before the platform sends a hard kill.',
+				],
+				bullets: ['A termination signal reaches the actual Node process, not only a shell wrapper', 'Readiness can change independently from liveness', 'In-flight work has an explicit drain policy', 'Database pools, queue consumers, and timers have close or stop methods', 'A shutdown deadline is shorter than the runtime or orchestrator grace period'],
+			},
+			{
+				heading: 'Use a one-way shutdown state machine',
+				paragraphs: [
+					'Keep shutdown state in one place. The first `SIGTERM` or `SIGINT` changes the service from accepting to draining; repeated signals should not start a second cleanup sequence. Set the readiness flag to false immediately, then stop consumers that would pull new jobs. This is the application-level equivalent of telling the router that this instance should leave the pool.',
+					'In a minimal server, register one handler for both signals, guard it with a `shuttingDown` boolean, and await a single `shutdown()` promise. The handler should log a reason and a deadline, but it should not attempt to do large synchronous work. Make cleanup steps idempotent because a test, a supervisor, and an operator may all trigger the path differently.',
+				],
+				bullets: ['Accepting: readiness is true and new requests or jobs may start', 'Draining: readiness is false and new work is rejected or redirected', 'Closed: the HTTP server and dependencies have finished closing', 'Timed out: remaining work is abandoned and the process exits non-zero'],
+			},
+			{
+				heading: 'Stop new traffic before closing the listener',
+				paragraphs: [
+					'Expose a lightweight readiness route that returns success while the process is accepting work and a failure response once draining begins. A 503 communicates that the server is temporarily not ready; MDN describes it as appropriate for temporary overload or maintenance and notes that `Retry-After` may communicate an estimated recovery time. Do not turn the liveness route into a dependency check that causes a healthy process to restart while it is draining.',
+					'After readiness flips, allow the routing layer time to observe the change, then call `server.close()`. Node documents that this stops new connections and waits for existing connections to finish before invoking the callback. Keep the propagation delay and the maximum drain time explicit. If the deadline expires, force-close remaining connections only when the lost work is acceptable and the process must exit.',
+				],
+				bullets: ['Readiness failure: this instance should receive no new traffic', 'Liveness success: the process is still alive while it drains', '`server.close()`: stop new connections and wait for existing work', 'Hard deadline: protect the deployment from an indefinitely stuck process'],
+			},
+			{
+				heading: 'Drain application work and dependencies in order',
+				paragraphs: [
+					'Close in dependency order. First stop intake: HTTP readiness, queue polling, scheduled jobs, and websocket upgrades. Then let active handlers finish within a bounded budget. After that, close database pools, message-broker channels, telemetry exporters, and other resources. Finally clear timers and resolve the shutdown promise. Closing a database before handlers finish turns an orderly deployment into a burst of avoidable errors.',
+					'For queue workers, do not acknowledge a message merely because shutdown started. Stop fetching new messages, let the current handler finish if it is safe, and leave unfinished work unacknowledged or explicitly requeue it according to the broker contract. Any operation that can be repeated needs an idempotency key or a durable state transition; graceful shutdown reduces loss, but it cannot make an external side effect atomic.',
+				],
+				bullets: ['Stop intake before cleanup', 'Bound every awaitable close operation', 'Preserve retryable work instead of acknowledging it prematurely', 'Use idempotency for side effects that may be interrupted', 'Log each phase with elapsed time and a correlation or instance ID'],
+			},
+			{
+				heading: 'Test the shutdown path as a production feature',
+				paragraphs: [
+					'Run the API locally, start a request that deliberately waits, send `SIGTERM`, and verify the request completes while a new request is rejected or routed elsewhere. Repeat with an open keep-alive connection, a slow downstream call, a queue message in progress, and a dependency that refuses to close. Confirm that the process exits before the configured deadline and that the next deployment can start without port or lock conflicts.',
+					'Test signal delivery in the same shape as production. A shell-form container entrypoint can leave the signal aimed at the shell instead of Node; inspect the process tree and use an exec-form entrypoint or a proper init when needed. Also test a second signal, a forced deadline, and a startup failure. The expected result is observable: readiness changes, new work stops, active work follows its policy, resources close, and the exit code tells the supervisor whether the shutdown was clean.',
+				],
+				bullets: ['Send termination during a slow but valid request and expect the chosen drain behavior', 'Verify readiness changes before the listener closes', 'Stop a worker during a message and verify no silent acknowledgement', 'Force a dependency close timeout and verify bounded exit', 'Send a second signal and verify cleanup is not run twice', 'Capture shutdown duration, forced exits, active work, and close errors'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'The common mistake is treating shutdown as a `process.exit()` callback. Immediate exit skips cleanup and can terminate successful work halfway through. The opposite mistake is waiting forever for a request or dependency that will never complete. A useful shutdown policy is explicit about what is protected, what is retried, and when the platform is allowed to take over.',
+					'Before enabling rolling deployments, compare the application drain deadline with the proxy idle timeout, load balancer behavior, container grace period, and queue visibility timeout. Keep enough margin for readiness propagation and logging. Document the expected status during draining, the safe replay procedure, and the evidence an operator should collect after a forced shutdown.',
+				],
+				bullets: ['Signals reach Node and are covered by an integration test', 'Readiness flips before new work is accepted', 'Liveness does not fail merely because shutdown is draining', 'HTTP, queue, database, telemetry, and timer cleanup have owners', 'All close operations have a bounded deadline', 'Interrupted side effects are idempotent or recoverable', 'Shutdown metrics and logs identify clean versus forced exits', 'Grace periods and proxy timeouts are documented together'],
+			},
+		],
+	},
 ];

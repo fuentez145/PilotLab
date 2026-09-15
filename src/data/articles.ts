@@ -3017,4 +3017,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-scheduler-yield-improve-inp',
+		title: 'How to Use scheduler.yield() to Improve INP',
+		seoTitle: 'Use scheduler.yield() to Improve INP | PilotLab',
+		dek: 'A practical browser-performance tutorial for breaking up expensive interaction work, supporting browsers without the API, and proving the change with field and lab measurements.',
+		published: '2026-09-15',
+		updated: '2026-09-15',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to use scheduler.yield to improve INP',
+		intro: 'A slow click handler can make a product feel broken even when the page loaded quickly. The browser cannot paint feedback or process another interaction while a long JavaScript task occupies the main thread. This tutorial shows where scheduler.yield() helps, how to add a fallback, and how to verify that the change improves the interaction rather than merely moving work around.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — Scheduler: yield() method', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/yield' },
+			{ label: 'MDN — Prioritized Task Scheduling API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Prioritized_Task_Scheduling_API' },
+			{ label: 'web.dev — Optimize Interaction to Next Paint', url: 'https://web.dev/articles/optimize-inp' },
+			{ label: 'web.dev — Optimize long tasks', url: 'https://web.dev/articles/optimize-long-tasks' },
+		],
+		sections: [
+			{
+				heading: 'Start with the interaction, not the API',
+				paragraphs: [
+					'Use this technique when field or lab evidence points to a slow interaction whose processing work is larger than the user needs to wait for immediately. INP includes input delay, event-handler processing, and presentation delay; a yield can reduce the time before the browser gets a chance to paint or handle other work, but it cannot make the total computation disappear.',
+					'First identify the interaction and its expensive phase in the Performance panel or your RUM data. Common candidates are filtering a large table, rendering a long result list, parsing a large response, or recalculating several UI regions after a click. Do not add yields to every handler: extra scheduling can increase total latency and make state transitions harder to reason about.',
+				],
+				bullets: ['A reproducible slow click, keypress, or tap', 'A browser profile showing long main-thread tasks', 'A way to test the interaction on a representative device', 'Field data or a lab baseline for the interaction', 'A clear separation between immediate feedback and deferred work'],
+			},
+			{
+				heading: 'Split immediate feedback from expensive work',
+				paragraphs: [
+					'The first change is architectural. Update the UI state that acknowledges the interaction, then yield before the work that can wait. For example, show a loading state or the selected filter synchronously, then continue with the expensive filtering after the browser has an opportunity to paint.',
+					'In an async handler, the core pattern is: `async function handleFilter() { setFilter(next); await yieldToBrowser(); renderFilteredRows(next); }`. The helper below keeps the feature usable where scheduler.yield() is not available: `const yieldToBrowser = () => globalThis.scheduler?.yield?.() ?? new Promise((resolve) => setTimeout(resolve, 0));`. Keep the fallback in one utility so its behavior can be tested and replaced as browser support changes.',
+				],
+				bullets: ['Make the smallest user-visible state change before yielding', 'Yield before expensive CPU work, not after it', 'Keep the continuation safe if the user changes the input again', 'Use a request or generation ID to discard stale results', 'Do not put authorization, persistence, or destructive side effects behind an unguarded client-only yield'],
+			},
+			{
+				heading: 'Chunk repeated work instead of yielding once',
+				paragraphs: [
+					'One yield helps only at one boundary. If a loop processes thousands of records, split it into bounded chunks and yield between chunks. A useful starting point is a small batch such as 50 or 100 items, but choose the size from profiling: each chunk should be short enough to leave room for input and rendering on the devices you support.',
+					'For example: `for (let i = 0; i < rows.length; i += 100) { process(rows.slice(i, i + 100)); await yieldToBrowser(); }`. Avoid creating unnecessary arrays for very large inputs; use indexes or iterators when allocation becomes visible. If the work is CPU-heavy and can be isolated, a Web Worker may be a better boundary than repeatedly scheduling on the main thread.',
+				],
+				bullets: ['Measure chunk duration on slower target devices', 'Check cancellation or stale-input state between chunks', 'Yield after meaningful units of work, not every individual item', 'Move CPU-heavy independent work to a Web Worker when chunking is not enough', 'Keep DOM updates batched so the rendering cost does not recreate the long task'],
+			},
+			{
+				heading: 'Know the browser-support and scheduling trade-offs',
+				paragraphs: [
+					'MDN currently marks scheduler.yield() as limited availability, so feature-detect it rather than assuming it exists. The API continues an async function as a prioritized task, with a default user-visible priority. The setTimeout fallback is broader but does not provide the same scheduling semantics and may be delayed by timer throttling.',
+					'Yielding is not automatically a performance win. It adds a task boundary, can expose intermediate state to other code, and may let a user start an action that invalidates the continuation. Define the state contract before splitting work: which values are captured, which are read again, and what happens when the component unmounts or a newer request wins.',
+				],
+				bullets: ['Feature-detect with `globalThis.scheduler?.yield`', 'Treat the fallback as compatible behavior, not identical scheduling', 'Do not rely on a yield as a security or permission boundary', 'Abort or ignore obsolete work when inputs change', 'Prefer less work and smaller DOM updates before adding scheduling complexity'],
+			},
+			{
+				heading: 'Verify the change in the lab and in the field',
+				paragraphs: [
+					'Record the same user flow before and after the change with CPU throttling that represents your audience. Compare the interaction’s input delay, processing duration, presentation delay, long-task count, and total work. You should see the immediate visual response happen sooner; if total work increased sharply or the final result became inconsistent, the implementation needs another boundary or less work.',
+					'Use a real-user signal for the decision. web.dev recommends starting with field data for INP and using lab traces to diagnose a reproducible interaction. Segment results by route, device class, and interaction name. A better trace on your laptop is not enough evidence to claim that the customer experience improved.',
+				],
+				bullets: ['Capture a baseline and an after trace with the same interaction', 'Confirm the feedback paint occurs before the expensive continuation', 'Test rapid repeated input and cancellation', 'Check slow devices and reduced-power conditions', 'Monitor field INP and the affected interaction after release'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'The safest rollout is narrow: instrument one interaction, ship the smallest split, and compare the result. Keep the old path easy to remove if the continuation causes flicker, stale updates, increased total time, or unexpected errors. The main-thread budget is a product constraint, not a number to optimize in isolation.',
+					'If the interaction still performs poorly after yielding, stop adding scheduler calls and reassess the work. Reduce the input size, virtualize a long list, avoid repeated layout reads, simplify rendering, cache derived data, or move computation off the main thread. A yield improves cooperation with the browser; it does not turn an inefficient algorithm into an efficient one.',
+				],
+				bullets: ['The interaction has a measured baseline and named owner', 'Immediate feedback is separate from deferred work', 'scheduler.yield() is feature-detected with a tested fallback', 'Stale continuations cannot overwrite newer state', 'Chunk sizes are based on device-aware profiling', 'Rapid input, cancellation, unmount, and error paths are tested', 'Field monitoring covers INP and the target interaction', 'A rollback or feature flag can disable the split', 'The team has checked whether less work or a Web Worker is the better fix'],
+			},
+		],
+	},
 ];

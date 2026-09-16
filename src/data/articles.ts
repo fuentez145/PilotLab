@@ -3086,4 +3086,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'deprecate-public-api-without-breaking-clients',
+		title: 'How to Deprecate a Public API Without Breaking Clients',
+		seoTitle: 'Deprecate a Public API Without Breaking Clients | PilotLab',
+		dek: 'A practical migration plan for retiring an API endpoint: classify the change, publish a replacement, signal deprecation at runtime, and remove the old path only when evidence supports it.',
+		published: '2026-09-16',
+		updated: '2026-09-16',
+		readTime: '10 min read',
+		category: 'API architecture',
+		keyword: 'how to deprecate a public API without breaking clients',
+		intro: 'Retiring an API endpoint is a customer migration project, not a cleanup commit. You need to know who depends on the old contract, give them a usable replacement, make the timeline visible in documentation and responses, and preserve a rollback or support path while traffic moves. This guide uses the current HTTP deprecation signals and a staged rollout that small product teams can operate.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9745 — Deprecation HTTP Response Header Field', url: 'https://www.rfc-editor.org/rfc/rfc9745' },
+			{ label: 'IETF RFC 8594 — Sunset HTTP Header Field', url: 'https://www.rfc-editor.org/rfc/rfc8594' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+		],
+		sections: [
+			{
+				heading: 'Decide whether the change is actually breaking',
+				paragraphs: [
+					'Begin with an inventory of consumers, not a version number. List the endpoint, methods, authentication scopes, request fields, response fields, error shapes, rate limits, and documented examples. Then identify callers from gateway logs, API keys, client telemetry, support records, and partner contacts. A client that does not appear in your repository may still be your most important dependency.',
+					'Adding an optional response field is often compatible, while removing a field, changing its type, tightening validation, changing pagination semantics, or changing authorization can break a client. Treat undocumented behavior as a compatibility risk until you have evidence that no consumer relies on it. Microsoft’s API guidance emphasizes loose coupling and independent evolution; that requires a contract you can inspect and communicate.',
+				],
+				bullets: ['Name the old resource and the intended replacement', 'Record known consumers, owner, last-seen date, and migration status', 'Classify request, response, error, auth, and behavioral changes separately', 'Define the success signal: migrated traffic, not merely published documentation', 'Freeze new dependencies on the old endpoint before starting the clock'],
+			},
+			{
+				heading: 'Design the replacement before announcing retirement',
+				paragraphs: [
+					'Build the replacement contract while the old path still works. Keep the business meaning stable where possible, document differences with before-and-after examples, and provide a migration guide that answers what to change in code, credentials, tests, and operational dashboards. If the replacement needs a new version, choose a boundary that clients can adopt independently rather than forcing unrelated resources into one migration.',
+					'Run both paths against representative requests before asking customers to move. Contract tests should cover successful responses, validation failures, authorization failures, pagination or filtering, rate-limit behavior, and idempotency where relevant. A compatibility adapter can reduce migration effort, but do not hide important semantic differences behind a translation layer that nobody owns.',
+				],
+				bullets: ['Publish a stable replacement URL or version', 'Document field mappings, behavior changes, and removed capabilities', 'Give each consumer a test environment or safe rollout path', 'Keep old and new metrics comparable by operation and client', 'Assign an owner for migration questions and exceptions'],
+			},
+			{
+				heading: 'Signal deprecation at runtime',
+				paragraphs: [
+					'Use documentation and direct communication for humans, then add a machine-readable signal to responses from the old resource. RFC 9745 defines the Deprecation response header as a way to tell a client that the resource will be or has been deprecated. Its value is a structured date, for example `Deprecation: @1782864000`; it describes deprecation, not an instruction to stop serving the resource immediately.',
+					'Link the response to migration information and, if you have a firm future shutdown date, communicate that separately with the Sunset header defined by RFC 8594. A response might include `Link: <https://api.example.com/docs/migrate-orders>; rel="deprecation"` and `Sunset: Tue, 30 Jun 2027 00:00:00 GMT`. Use dates that are real, documented, and controlled by your release policy; do not emit a deadline that your team cannot honor.',
+				],
+				bullets: ['Return Deprecation on the old resource, not only on a generic error page', 'Link to a migration document with a stable URL', 'Use Sunset only when the likely unresponsive date is meaningful', 'Keep the endpoint behavior unchanged during the warning period', 'Expose the headers in integration tests and client documentation'],
+			},
+			{
+				heading: 'Roll out in stages and measure real adoption',
+				paragraphs: [
+					'Announce the change with a dated plan: deprecation date, recommended migration date, expected sunset date, support channel, and the conditions that could change the schedule. Start with internal clients and a small partner group. Watch traffic to the old path by client identity, version, tenant, status, and operation. A falling request count is useful; zero requests from one known client may indicate missing telemetry rather than successful migration.',
+					'Give clients a way to prove migration before you remove access. Compare old and new outcomes where safe, sample requests by operation, and alert on new consumers of the deprecated path. Do not rely on a single global counter: one long-lived integration can keep a tiny request volume but still block retirement.',
+				],
+				bullets: ['Add a dashboard for deprecated requests and unique consumers', 'Track migration by API key, app version, tenant, and endpoint', 'Notify owners directly when traffic remains near the deadline', 'Keep a temporary exception process with an explicit expiry', 'Record support and incident impact separately from request volume'],
+			},
+			{
+				heading: 'Sunset carefully, with a recovery path',
+				paragraphs: [
+					'Before disabling the old resource, require evidence: no active contractual consumers, migration tests passing, replacement capacity checked, documentation updated, and an operator who can reverse the change. Remove the route through a controlled release or feature flag, return a deliberate error that points to the replacement, and avoid leaking credentials or private migration details in that response.',
+					'Keep the implementation and data needed for recovery for a defined period, but do not promise indefinite support. A sunset can expose hidden clients, cached URLs, or replay jobs that were not included in the inventory. If the old path must return temporarily, restore it with the smallest safe scope, keep the deprecation signal, and publish a revised date rather than silently reopening it forever.',
+				],
+				bullets: ['Run a final consumer and traffic review before removal', 'Deploy the removal behind a reversible control when feasible', 'Return a stable 4xx response with a replacement link after sunset', 'Monitor support, errors, retries, and new traffic immediately after removal', 'Retain a dated decision record and rollback procedure'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'The most common failure is treating a deprecation header as a migration plan. Headers help software notice a lifecycle event; they do not update a client, explain a semantic change, or identify the person who owns an integration. The second failure is setting a sunset date before measuring consumers, then extending it repeatedly without improving the migration path.',
+					'Keep the policy simple enough to apply consistently: every public resource has an owner, a compatibility promise, a documented replacement process, and observable usage. Review the plan with support, security, and the teams operating the replacement. Deprecation is successful when clients have a supported path forward and the old contract can be removed without an emergency.',
+				],
+				bullets: ['Consumer inventory is based on logs and known contracts, not repository search alone', 'The replacement has contract tests and capacity for migrated traffic', 'Deprecation and migration links are emitted and documented', 'Sunset dates are explicit, realistic, and owned', 'Old-path traffic is segmented by consumer and operation', 'New dependencies on the deprecated path are detected', 'Exceptions have owners, reasons, and expiry dates', 'Removal, rollback, and post-sunset monitoring are tested', 'The final response does not expose sensitive implementation details'],
+			},
+		],
+	},
 ];

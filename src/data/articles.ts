@@ -3154,4 +3154,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'add-http-compression-nodejs-api-safely',
+		title: 'How to Add HTTP Compression to a Node.js API Safely',
+		seoTitle: 'HTTP Compression for Node.js APIs | PilotLab',
+		dek: 'A production-minded guide to negotiating gzip or Brotli, setting correct cache headers, avoiding already-compressed payloads, and measuring whether compression helps.',
+		published: '2026-09-17',
+		updated: '2026-09-17',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to add HTTP compression to a Node.js API',
+		intro: 'Response compression can reduce the bytes your API sends, but turning it on globally is not a performance plan. Compression costs CPU, interacts with caches and proxies, and is wasteful for small or already-compressed payloads. This tutorial gives a Node.js team a safe boundary: negotiate the client’s supported encoding, compress only suitable representations, preserve cache correctness, and verify the wire behavior with measurements.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'Node.js Documentation — Zlib and HTTP compression', url: 'https://nodejs.org/api/zlib.html#compressing-http-requests-and-responses' },
+			{ label: 'MDN — Content-Encoding header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Encoding' },
+			{ label: 'MDN — Accept-Encoding header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Accept-Encoding' },
+			{ label: 'IETF RFC 9110 — Accept-Encoding and content negotiation', url: 'https://www.rfc-editor.org/rfc/rfc9110#field.accept-encoding' },
+		],
+		sections: [
+			{
+				heading: 'Start with the response inventory',
+				paragraphs: [
+					'Before adding middleware, measure which responses consume bandwidth and which ones consume CPU to produce. JSON lists, HTML, JavaScript, CSS, and text usually have repeated structure that compresses well. JPEG, PNG, WebP, AVIF, ZIP, PDF, and other already-compressed formats usually should pass through unchanged; compressing them can make the payload larger while adding work.',
+					'Choose a minimum size from measurements rather than a universal rule. A tiny JSON response may be smaller than the encoding overhead, while a large export may justify compression even when its generation is already expensive. Keep streaming responses and binary downloads on an explicit path so a generic wrapper does not change their latency or memory behavior accidentally.',
+				],
+				bullets: ['Record route, status, content type, uncompressed size, duration, and bytes sent', 'Compress text-like representations first: JSON, HTML, CSS, JavaScript, XML, and plain text', 'Skip already-compressed media and archives unless a benchmark proves otherwise', 'Set a minimum response size and make it configurable', 'Treat secrets in compressed responses as a separate security review'],
+			},
+			{
+				heading: 'Negotiate the encoding at the HTTP boundary',
+				paragraphs: [
+					'The client advertises supported encodings in Accept-Encoding; the server selects one and identifies it with Content-Encoding. RFC 9110 defines this as content negotiation, and MDN notes that a server may choose identity when compression is not worthwhile or resources are constrained. Do not assume every caller accepts Brotli just because browsers do; API clients, webhooks, health checks, and older integrations may differ.',
+					'A practical policy is to prefer Brotli when your runtime and clients support it, fall back to gzip, and otherwise send the identity representation. Parse quality values correctly or use a maintained, tested compression component. Never manually set Content-Encoding to gzip unless the bytes have actually been encoded as gzip.',
+				],
+				bullets: ['Honor q=0 and the client’s declared preferences', 'Return the actual selected encoding in Content-Encoding', 'Add Vary: Accept-Encoding whenever the representation varies by encoding', 'Keep identity available unless your contract explicitly forbids it', 'Do not treat an absent Accept-Encoding header as permission to send compressed bytes blindly'],
+			},
+			{
+				heading: 'Implement compression without blocking the event loop',
+				paragraphs: [
+					'Node exposes streaming gzip, deflate, and Brotli transforms through node:zlib, and its documentation includes HTTP response-compression guidance. Prefer a streaming integration or a reverse proxy that owns compression rather than calling a synchronous compression function inside every request. Synchronous work can block unrelated requests when payloads are large or concurrency rises.',
+					'If a proxy or CDN already compresses responses, make that layer the owner and verify that the origin does not compress again. If the Node process owns it, apply compression after the response has its final content type and before bytes are sent. Remove or recalculate Content-Length for the encoded representation; a stale length is a protocol bug, not a cosmetic header issue.',
+				],
+				bullets: ['Choose one compression owner: origin, reverse proxy, or CDN', 'Use streaming transforms for large or streamed responses', 'Keep compression settings outside route-specific business logic', 'Set CPU and memory limits appropriate to the service', 'Ensure errors in the transform terminate the response safely'],
+			},
+			{
+				heading: 'Keep caches and security boundaries correct',
+				paragraphs: [
+					'Compression changes the representation bytes, so caches need to know that the response varies by Accept-Encoding. Send Vary: Accept-Encoding when the origin selects different encodings. If a CDN is in front, test its cache key and header behavior instead of assuming it will preserve the origin policy. A cache that stores one encoded response and serves it to an incompatible client is a correctness failure.',
+					'Be careful with responses that mix attacker-controlled text and secrets. Compression side channels such as BREACH are not solved by choosing a different level. For sensitive pages, avoid reflecting secrets alongside user-controlled input, disable compression for the affected response, or follow a security review that understands the application’s threat model. Never compress an authentication token merely because it is in a JSON response without considering who can observe response sizes.',
+				],
+				bullets: ['Send Vary: Accept-Encoding for negotiated responses', 'Never let compression bypass authorization or tenant-scoped cache keys', 'Verify compressed and uncompressed responses have identical semantics', 'Review secret-plus-reflection responses for compression side channels', 'Keep content type and content length metadata consistent with the encoded body'],
+			},
+			{
+				heading: 'Verify with curl, a proxy, and real traffic',
+				paragraphs: [
+					'Test the wire contract directly. Request a large JSON response with Accept-Encoding: br, then gzip, then identity. Confirm the status, Content-Encoding, Vary, Content-Type, and body decoding. Request a small response and an image or archive and verify that the skip policy is deliberate. Repeat through the production proxy or CDN because the edge may terminate or rewrite compression.',
+					'Compare more than transfer size. Record time to first byte, total response time, CPU, memory, event-loop delay, cache hit behavior, and error rates before and after the change. Compression is useful when the saved network time is worth the encoding cost. If CPU rises while users do not receive a measurable improvement, lower the scope, change the level, pre-compress static assets, or move ownership to the edge.',
+				],
+				bullets: ['Accept-Encoding: br returns Brotli only when the client accepts it', 'Accept-Encoding: gzip returns gzip only when selected and applied', 'Identity requests remain readable and semantically identical', 'Small and already-compressed responses follow the documented skip rule', 'A cached response is safe across encoding variants', 'Metrics show bytes saved, compression time, CPU, latency, and failures'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'Compression should be a measured platform policy, not a checkbox applied to every route. Document the owner, algorithms, threshold, quality settings, excluded content types, proxy behavior, and rollback switch. Keep an eye on changes to payload shape: a response that was small yesterday may become a large export after a product release.',
+					'The common failures are double compression, incorrect Vary behavior, stale Content-Length, compressed error pages that break clients, and CPU saturation during traffic spikes. Start with read-heavy text responses, validate the headers and decoded body, then expand only when the service’s resource budget and user-visible latency support it.',
+				],
+				bullets: ['One documented layer owns response compression', 'Negotiation and q-values are covered by integration tests', 'Content-Encoding and Vary match the bytes and cache behavior', 'Content-Length is absent or describes the encoded body correctly', 'Already-compressed and sensitive responses have explicit policy', 'CPU, memory, event-loop delay, bytes saved, and error rates are monitored', 'A configuration change can disable compression without a code rollback', 'The team has tested origin, proxy, CDN, and direct-client behavior'],
+			},
+		],
+	},
 ];

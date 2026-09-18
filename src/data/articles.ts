@@ -3223,4 +3223,80 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'validate-jwt-nodejs-api-safely',
+		title: 'How to Validate JWTs in a Node.js API Safely',
+		seoTitle: 'Validate JWTs in a Node.js API Safely | PilotLab',
+		dek: 'A practical verification boundary for signed access tokens: pin algorithms, validate issuer and audience, handle key rotation, and test the failures attackers will send.',
+		published: '2026-09-18',
+		updated: '2026-09-18',
+		readTime: '11 min read',
+		category: 'API security',
+		keyword: 'how to validate JWTs in a Node.js API',
+		intro: 'A JWT is not an authorization decision. It is a signed representation of claims that your API must verify against the contract it trusts. The dangerous shortcut is to decode the payload, check one timestamp, and attach a user to the request. A safer Node.js boundary validates the signature with an explicitly allowed algorithm, binds the token to the expected issuer and audience, handles key rotation deliberately, and rejects malformed or replayed inputs without leaking useful details.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 7519 — JSON Web Token', url: 'https://www.rfc-editor.org/rfc/rfc7519' },
+			{ label: 'IETF RFC 8725 — JSON Web Token Best Current Practices', url: 'https://www.rfc-editor.org/rfc/rfc8725' },
+			{ label: 'Node.js Documentation — Crypto verify()', url: 'https://nodejs.org/api/crypto.html#cryptoverifyalgorithm-data-key-signature-callback' },
+		],
+		sections: [
+			{
+				heading: 'Define what a valid token means',
+				paragraphs: [
+					'You need an API that receives a bearer token, a trusted issuer or identity provider, the audience your API represents, a maintained JWT library or carefully isolated crypto adapter, and a key-distribution plan. Decide those values before writing middleware. The verifier should not accept an issuer, audience, algorithm, or key URL from the request itself.',
+					'RFC 7519 defines registered claims such as iss (issuer), sub (subject), aud (audience), exp (expiration), nbf (not before), iat (issued at), and jti (token ID). They are claims, not magic permission switches: your application must decide which are required and what each means for this API. Keep authentication—who signed this token—separate from authorization—what this subject may do here.',
+				],
+				bullets: ['Pin the trusted issuer exactly, including scheme and relevant path', 'Pin the audience to this API rather than accepting any token from the provider', 'Allow only the signing algorithms your provider and library contract require', 'Require exp for access tokens and choose a small, documented clock tolerance', 'Define whether nbf, jti, scopes, roles, and tenant claims are required or optional'],
+			},
+			{
+				heading: 'Verify the signature before trusting claims',
+				paragraphs: [
+					'Decoding a JWT only turns base64url text into JSON. It does not prove who signed it or that its contents were not changed. Verification must use the issuer’s trusted key and the exact signing input, then validate the result before application code reads authorization claims. A rejected token should produce the same safe client-facing response whether it was malformed, expired, or signed by an unknown key.',
+					'Keep the cryptographic operation behind one small adapter. A maintained library can handle JWT serialization, claim checks, and key formats; Node’s crypto APIs provide lower-level signature primitives but do not by themselves define JWT policy. Do not build a general-purpose verifier that chooses its key or algorithm from untrusted header values without an allowlist and a trusted key source.',
+				],
+				bullets: ['Parse the compact token and reject unexpected structure or size', 'Read the header only to select among already-approved options', 'Verify with the trusted public or symmetric key', 'Validate issuer, audience, time claims, and token type after signature verification', 'Never authorize from an unverified decoded payload'],
+			},
+			{
+				heading: 'Prevent algorithm and key-confusion failures',
+				paragraphs: [
+					'RFC 8725 describes attacks where an implementation accepts alg=none or changes an asymmetric algorithm such as RS256 to a symmetric algorithm such as HS256. The defensive rule is simple: the verifier chooses the allowed algorithm from server configuration, not from the token. The header can identify which configured key to try, but it cannot expand the set of algorithms or turn a public key into an HMAC secret.',
+					'Use asymmetric signing when multiple services need to verify tokens but should not be able to mint them. Keep private signing keys outside the API process where practical, rotate them with an overlap period, and publish only the public material through a trusted configuration or provider JWKS endpoint. Cache keys with an explicit refresh and failure policy; do not fetch an arbitrary URL supplied by a token header.',
+				],
+				bullets: ['Reject none and every algorithm outside the configured allowlist', 'Map each allowed algorithm to the correct key type', 'Treat an unknown kid as a key-rotation or configuration failure, not a reason to trust the token', 'Bound JWKS fetch time, response size, refresh frequency, and cache lifetime', 'Retain old public keys long enough to verify tokens issued before rotation'],
+			},
+			{
+				heading: 'Turn verified claims into authorization',
+				paragraphs: [
+					'After verification, normalize the claims into an internal identity object and pass it to authorization checks. A valid token from the right issuer may still lack the scope for an operation, belong to another tenant, or represent a client rather than an end user. Check the resource boundary at the data access layer as well as at the route, especially for multi-tenant APIs.',
+					'Do not use a broad claim such as role=admin as the only protection for every route. Define permissions by operation, tenant, and resource where the product needs that precision. If a provider changes claim names or scope formats, translate them at the identity boundary instead of spreading provider-specific strings throughout business code.',
+				],
+				bullets: ['Require the specific scope or permission for each sensitive operation', 'Derive tenant identity from the verified claim and server-side membership data', 'Check ownership or resource permissions after authentication', 'Keep service-to-service identities distinct from human-user identities', 'Return 401 for missing or invalid authentication and 403 for an authenticated caller without permission'],
+			},
+			{
+				heading: 'Handle expiry, revocation, and key rotation honestly',
+				paragraphs: [
+					'JWT verification is usually local, which is useful for latency and resilience but means a revoked token may remain cryptographically valid until it expires. Keep access-token lifetimes appropriate to the risk, use refresh-token rotation or provider revocation where the protocol supports it, and add a denylist or session-version check only when the business requirement justifies the state and lookup cost.',
+					'Key rotation is a deployment workflow, not a catch block. Publish the new verification key before issuing tokens with it, accept both old and new keys during the overlap, then remove the old key only after its maximum token lifetime and clock margin have passed. Monitor unknown-key failures and verification errors separately so a provider outage is not mistaken for an attack or hidden by an unsafe fallback.',
+				],
+				bullets: ['Use a bounded clock tolerance for small machine-time differences', 'Never extend exp silently because a provider is unavailable', 'Fail closed for an invalid signature, issuer, audience, or algorithm', 'Plan overlap and rollback for signing-key changes', 'Do not log raw tokens; record issuer, key ID, safe error class, and correlation ID only'],
+			},
+			{
+				heading: 'Test the negative cases before production',
+				paragraphs: [
+					'Build a test matrix around the trust boundary. Start with a valid token, then change one property at a time: signature, algorithm, key ID, issuer, audience, expiration, not-before time, token structure, required scope, tenant, and authorization header format. Include a token signed by a different trusted issuer and a token whose key endpoint is unavailable. Every invalid case should stop before a protected handler or database mutation runs.',
+					'Exercise the operational path through the real proxy and key cache. Rotate a test key, issue tokens on both sides of the overlap, restart the service with an empty cache, and simulate a slow or oversized key response. Measure verification latency and cache misses, and confirm that client errors do not reveal whether a subject, key, or account exists.',
+				],
+				bullets: ['Valid signature plus wrong audience is rejected', 'alg=none and algorithm/key-type mismatches are rejected', 'Expired and not-yet-valid tokens are rejected within the documented clock policy', 'An unknown or removed key ID follows the planned refresh and failure path', 'A valid token without the required scope cannot mutate protected data', 'Cross-tenant resource access is denied even with a valid token', 'No test, log, trace, or error response stores the bearer token'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'JWTs are a token format, not a complete identity system. They do not solve secure token storage, logout, refresh-token rotation, account linking, authorization modeling, or incident response. Use a provider’s maintained integration guidance where possible, keep the verifier policy centralized, and document which service owns signing, key publication, claim semantics, and emergency revocation.',
+					'The safe default is a narrow, observable boundary: explicit algorithms and keys, required claims, bounded lifetimes, clear 401/403 behavior, least-privilege authorization, and tests that attack the assumptions. If the API cannot explain why it trusts a token and how it stops trusting one, the authentication design is incomplete.',
+				],
+				bullets: ['Verification policy is versioned and reviewed like application code', 'Issuer, audience, algorithms, key source, clock tolerance, and lifetimes are documented', 'Key rotation, provider outage, emergency revocation, and rollback have runbooks', 'Metrics distinguish missing tokens, invalid signatures, claim failures, key misses, and forbidden actions', 'Protected routes have authorization and cross-tenant negative tests', 'Logs and telemetry contain correlation metadata but never bearer credentials', 'A configuration switch can disable a compromised issuer or key without weakening other tenants'],
+			},
+		],
+	},
 ];

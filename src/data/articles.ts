@@ -3299,4 +3299,78 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-web-workers-cpu-heavy-javascript',
+		title: 'How to Use Web Workers for CPU-Heavy JavaScript',
+		seoTitle: 'Use Web Workers for CPU-Heavy JavaScript | PilotLab',
+		dek: 'Move expensive browser work off the main thread without creating a new bottleneck: define a message contract, transfer data deliberately, and verify that input stays responsive.',
+		published: '2026-09-19',
+		updated: '2026-09-19',
+		readTime: '10 min read',
+		category: 'Web performance',
+		keyword: 'how to use web workers for CPU-heavy JavaScript',
+		intro: 'A web page can feel slow even when the server is fast. Parsing a large file, transforming thousands of records, generating a preview, or calculating a complex filter can occupy the browser main thread long enough to delay clicks and keystrokes. A Web Worker gives that work a separate execution context. The useful pattern is not to move every function into a worker; it is to isolate a bounded CPU-heavy operation behind a small message contract, keep the UI responsible for interaction, and measure the result on the devices your users actually have.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — Using Web Workers', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers' },
+			{ label: 'MDN — Worker.postMessage()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage' },
+			{ label: 'web.dev — Optimize long tasks', url: 'https://web.dev/articles/optimize-long-tasks' },
+			{ label: 'MDN — requestIdleCallback()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: prove the main thread is the problem',
+				paragraphs: [
+					'You need a browser application, a reproducible input that triggers the slow work, and a way to record a performance trace. Start in browser DevTools: capture the interaction, look for a long task around the click or input event, and identify whether the time is spent in JavaScript, rendering, layout, or network activity. A worker will not fix an oversized DOM, a slow API, or a handler that spends most of its time waiting.',
+					'Choose a task with a useful boundary. Parsing a CSV, resizing or decoding data, calculating a search index, and applying a large pure transformation are good candidates. DOM reads and writes must stay on the main thread, so a task tightly coupled to individual elements may need a different fix: less work, smaller chunks, or a more efficient rendering strategy.',
+				],
+				bullets: ['A measured main-thread bottleneck rather than a guess', 'A task that can receive serializable input and return a result', 'A cancellation or stale-result policy for repeated user actions', 'A browser support baseline appropriate to your audience', 'A test fixture large enough to reproduce the user-visible delay'],
+			},
+			{
+				heading: 'Create a worker with an explicit message contract',
+				paragraphs: [
+					'MDN describes a worker as a separate execution context that communicates with its creator through messages. Treat that boundary like a small API. Define an operation name, input shape, result shape, error shape, and request ID before moving the implementation. The request ID matters when a user starts a second search before the first one finishes: the UI can ignore a late result that no longer matches the current request.',
+					'A minimal module-worker shape is: the page creates a Worker with a URL resolved from import.meta.url; the worker listens for message events, runs a pure function, and posts back a success or error object. In a bundled application, use the bundler’s worker URL pattern rather than hard-coding a development path. Keep the worker free of DOM assumptions and application state that only exists in the window context.',
+				],
+				bullets: [
+					"const worker = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });",
+					"worker.postMessage({ id, type: 'filter-records', records, query });",
+					"worker.onmessage = ({ data }) => { if (data.id === id) render(data.result); };",
+					"self.onmessage = ({ data }) => self.postMessage({ id: data.id, result: filterRecords(data.records, data.query) });",
+				],
+			},
+			{
+				heading: 'Move data without creating a copy bottleneck',
+				paragraphs: [
+					'Worker messages use the structured clone algorithm by default, so the values are copied into the receiving context. That is convenient for ordinary objects but expensive for a very large array or deeply nested record set. Measure the copy and serialization cost separately from the computation; a worker can make the calculation parallel while still making the overall interaction slower if every request copies megabytes twice.',
+					'For binary data, use transferable objects where the ownership can move safely. An ArrayBuffer can be included in the transfer list; after transfer, the sending side no longer owns the buffer. That is fast, but it changes the calling code’s state, so do not transfer a buffer that the UI still needs. For repeated processing, consider a compact representation, a shared immutable input, or a worker that retains an index rather than sending the full dataset for every keystroke.',
+				],
+				bullets: ['Send the smallest input that reproduces the operation', 'Use an ID and version to associate a result with the current UI state', 'Transfer ArrayBuffer data only when relinquishing ownership is acceptable', 'Do not put secrets or unnecessary personal data into a worker message', 'Batch rapid input or debounce before starting another expensive operation'],
+			},
+			{
+				heading: 'Handle cancellation, errors, and worker lifetime',
+				paragraphs: [
+					'Workers do not automatically know that a result is obsolete. For searches and previews, debounce input and ignore results whose request ID is no longer current. For work that cannot be cheaply abandoned, add a cancel message and check a cancellation flag between chunks. Terminating and recreating a worker is a blunt fallback: it can discard queued work, lose diagnostic context, and pay startup cost again.',
+					'Attach both message and error handling. The worker should catch expected input errors and return a safe, typed failure; the page should surface a recoverable state and record enough context to debug it without logging customer data. Decide when to keep a worker alive. A long-lived worker avoids startup overhead but consumes resources; a task-specific worker is easier to reset but can increase latency for small jobs.',
+				],
+				bullets: ['Reject malformed messages before expensive processing', 'Return { id, ok: false, error: { code, message } } for expected failures', 'Use a current-request check to suppress stale results', 'Terminate workers when a page or feature no longer needs them', 'Keep a timeout or watchdog for a worker that stops responding', 'Never assume a worker error means the main-thread state is unchanged'],
+			},
+			{
+				heading: 'Verify responsiveness, correctness, and memory',
+				paragraphs: [
+					'Test the operation with a realistic fixture and compare three versions: the original main-thread implementation, the worker implementation with ordinary cloned messages, and the worker implementation with transfer or a smaller payload where appropriate. Record total interaction latency, time to first usable result, worker computation time, message overhead, and memory. A lower main-thread time is valuable only if the user gets a result in a reasonable amount of time.',
+					'Use the browser performance profiler while clicking, typing, and navigating away. Confirm that input events are no longer blocked by the calculation, that the returned result is identical for representative and edge-case inputs, and that repeated searches do not leave old workers or large arrays retained. Test a low-power mobile device or throttled CPU; a desktop trace can hide the actual failure mode.',
+				],
+				bullets: ['The same fixture produces the same result before and after offloading', 'A second request cannot be overwritten by a late first response', 'Worker startup and message transfer are included in the latency budget', 'Invalid input and worker crashes produce a recoverable UI state', 'Navigation and component unmount release workers and large data', 'The main thread remains responsive during the worst realistic task', 'Telemetry distinguishes compute time, queue time, transfer time, and failure'],
+			},
+			{
+				heading: 'Production checklist and alternatives',
+				paragraphs: [
+					'Use a worker when the work is genuinely CPU-bound and independent of the DOM. If the work is optional housekeeping, schedule it during idle time with a timeout, but note that MDN describes requestIdleCallback() as limited availability and warns that required work can wait for seconds without a timeout. If the work is small but blocks input, split it into chunks and yield between chunks. If the work is mostly network or database activity, fix the request path instead of adding a worker.',
+					'Workers add an asynchronous boundary, a serialization contract, another failure mode, and memory pressure. They are not a guarantee of faster total completion, and they do not make unsafe code or untrusted data safe. Keep the first version narrow, measure it on representative devices, and retain a feature flag or simple fallback while you validate the production behavior.',
+				],
+				bullets: ['Worker code has a clear input, output, error, and cancellation contract', 'Large payloads are minimized or transferred deliberately', 'UI updates remain on the main thread', 'The worker is reused or terminated according to measured cost', 'Performance traces cover desktop and constrained mobile hardware', 'A fallback exists for unsupported or operationally unsuitable environments', 'The team can identify whether the bottleneck is compute, transfer, rendering, or network'],
+			},
+		],
+	},
 ];

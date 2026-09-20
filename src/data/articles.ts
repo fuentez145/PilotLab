@@ -21,6 +21,81 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'implement-circuit-breaker-nodejs-api-dependencies',
+		title: 'How to Implement a Circuit Breaker for Node.js API Dependencies',
+		seoTitle: 'Circuit Breaker for Node.js API Dependencies | PilotLab',
+		dek: 'A practical failure boundary for outbound calls: stop retry storms, probe recovery carefully, and keep a degraded product useful when a dependency is down.',
+		published: '2026-09-20',
+		updated: '2026-09-20',
+		readTime: '11 min read',
+		category: 'Platform engineering',
+		keyword: 'how to implement a circuit breaker for Node.js API dependencies',
+		intro: 'Timeouts and retries protect an individual outbound call, but they do not stop a failing dependency from consuming every request slot in your service. A circuit breaker adds a second boundary: after a measured failure pattern, it rejects calls quickly, waits before probing recovery, and gives your application a deliberate fallback. This tutorial describes the state machine, a provider-neutral Node.js shape, and the tests that keep the breaker from becoming a hidden source of outages.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Microsoft Learn — Circuit Breaker pattern', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker' },
+			{ label: 'Node.js Documentation — Timers', url: 'https://nodejs.org/api/timers.html' },
+			{ label: 'IETF RFC 9110 — Retry-After', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-retry-after' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: decide what the breaker protects',
+				paragraphs: [
+					'Use a circuit breaker around a remote operation whose failure can consume local capacity: a payment provider, search API, feature service, or internal HTTP dependency. You need a bounded timeout and retry policy first, a fallback or explicit degraded response, structured logs and metrics, and a test double that can return errors and delays. A breaker cannot make an unsafe write safe to retry and cannot replace authentication, rate limits, or a queue.',
+					'Define the protected operation narrowly. A single breaker for every downstream route hides useful differences and lets one unhealthy endpoint block unrelated work. Key the breaker by dependency, operation, and sometimes tenant or region when those paths have genuinely separate capacity. Keep the decision at the application boundary where you know whether returning cached data, an empty result, a queued job, or a clear 503 is acceptable.',
+				],
+				bullets: ['Name the dependency and operation being protected', 'Set an attempt timeout shorter than the caller’s total deadline', 'Classify errors as retryable, permanent, or circuit-worthy', 'Define the user-visible fallback before opening the circuit', 'Choose the metrics and owner for changing the thresholds'],
+			},
+			{
+				heading: 'Model closed, open, and half-open states',
+				paragraphs: [
+					'A circuit breaker is easiest to reason about as a state machine. In Closed, calls flow to the dependency and recent failures are counted. When the configured failure threshold is reached within a time window, the breaker moves to Open. Open calls fail fast without contacting the dependency until a cooldown elapses. It then moves to Half-Open and permits a small probe; success closes the circuit, while failure opens it again.',
+					'The half-open limit matters. Letting every waiting request probe at once can flood a dependency that is only partly recovered. Microsoft’s circuit-breaker guidance describes the same three-state shape and specifically uses limited requests during recovery. Treat an open decision as a typed local error so the retry layer stops immediately rather than retrying a call that the breaker intentionally rejected.',
+				],
+				bullets: ['Closed: allow calls and record relevant failures', 'Open: reject immediately and expose remaining cooldown', 'Half-open: allow one or a small bounded number of probes', 'Success: reset the failure window only after the probe succeeds', 'Failure: return to Open and start a new cooldown'],
+			},
+			{
+				heading: 'Keep the implementation atomic and bounded',
+				paragraphs: [
+					'For a single Node.js process, the breaker can keep state in memory, but the state must still be updated safely when concurrent requests arrive. Check the state before the outbound call, reserve a half-open probe atomically, and record the result exactly once. Store timestamps in milliseconds, use a monotonic elapsed-time source where available, and make thresholds configurable rather than scattering constants through route handlers.',
+					'A minimal configuration might include failureThreshold, rollingWindowMs, openDurationMs, halfOpenMaxProbes, and successThreshold. Do not copy these values into production as universal defaults; tune them from dependency latency, request volume, and the cost of a false open. A breaker that opens on one harmless timeout is noisy, while one that waits for hundreds of failed calls may exhaust the service first.',
+				],
+				bullets: ['Guard the transition to Half-Open so only bounded probes pass', 'Record failure timestamps and discard entries outside the rolling window', 'Count timeouts and transport failures only when the policy says they indicate dependency trouble', 'Do not count validation, authentication, or caller-cancelled errors as dependency health', 'Return a typed CircuitOpen error with dependency and operation labels'],
+			},
+			{
+				heading: 'Compose the breaker with retries and fallbacks',
+				paragraphs: [
+					'Use retries inside the breaker only for failures that are safe and plausibly transient. One user operation may make several attempts, but the breaker should record the final outcome of the logical call and should open quickly when the dependency is consistently failing. If a retry encounters CircuitOpen, stop immediately. Otherwise the retry layer can turn a protective fast failure into a local retry storm.',
+					'When the circuit is open, choose a fallback that matches the operation. A read may return a short-lived cached representation or a clearly marked partial response. A write may be accepted into a durable job only if the business operation is idempotent and the queue is the intended contract. If there is no safe fallback, return a documented 503 and include a request ID; do not fabricate stale or successful data.',
+				],
+				bullets: ['Breaker outside the dependency client; retry policy inside the logical operation', 'Never retry CircuitOpen as if it were a fresh transport failure', 'Use Retry-After only when the client can act on a meaningful recovery estimate', 'Keep unsafe writes behind idempotency keys or reconciliation', 'Make fallback status and freshness visible to the caller where appropriate'],
+			},
+			{
+				heading: 'Make distributed deployment behavior explicit',
+				paragraphs: [
+					'An in-memory breaker is local to one Node.js process. In a multi-instance deployment, one replica can open while another continues sending traffic. That may be desirable because it preserves independent recovery, but it means the dependency can still receive aggregate load. If the dependency needs a fleet-wide admission decision, use a shared gateway, proxy, or carefully designed shared state; do not pretend that copying local counters into a cache automatically creates a correct distributed state machine.',
+					'Whichever scope you choose, expose state transitions and decisions. Track calls allowed, calls rejected open, half-open probes, successes after recovery, timeout counts, dependency status codes, fallback usage, and breaker state by safe dependency and operation labels. Never put raw URLs containing tokens, request bodies, or customer identifiers into the metric dimensions.',
+				],
+			},
+			{
+				heading: 'Verify failure, recovery, and shutdown paths',
+				paragraphs: [
+					'Use a controllable local server or mock dependency. Start with successful calls, then return enough timeouts or 503 responses to cross the threshold. Assert that the next calls fail quickly without reaching the dependency. Advance or wait through the cooldown, permit exactly the configured probe count, return success, and verify that normal traffic resumes. Then repeat with a failed probe and confirm the circuit remains open.',
+					'Test concurrency and composition, not just sequential transitions. Race several requests at the threshold, cancel an in-flight request, exhaust the caller deadline, and combine the breaker with retries. Verify that a permanent 400 does not open the circuit, a safe transient error follows the documented retry policy, a CircuitOpen error is not retried, and a fallback does not claim a fresh result. During process shutdown, stop accepting new work and ensure timers, queues, and in-flight calls do not keep the process alive unexpectedly; Node documents timer references and cancellation as part of its timer APIs.',
+				],
+				bullets: ['The threshold opens the circuit only for classified dependency failures', 'Open calls do not contact the dependency and return within the local budget', 'Only the configured half-open probes can test recovery', 'A successful probe closes the circuit and resets the intended counters', 'A failed probe reopens it without a request stampede', 'Retries stop on CircuitOpen and never duplicate unsafe writes', 'Metrics and logs identify state changes without leaking sensitive data', 'Shutdown clears or bounds timers and drains in-flight work'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'A circuit breaker is a load-shedding control, not a health oracle. It can open because of a local network problem, a bad deployment, an overly short timeout, or a dependency that is healthy for another route. Give operators a manual reset or configuration path with audit logging, but do not make “reset” the only response to a recurring fault. Fix the dependency, client policy, or capacity problem the metrics reveal.',
+					'Roll out with conservative thresholds and observe false opens, rejected calls, recovery duration, fallback rate, and customer-visible errors. Document whether state is per process or shared, which errors count, how long the cooldown lasts, and what support should tell customers. The useful outcome is not that the circuit stays open; it is that one failing dependency cannot silently take down unrelated parts of the product.',
+				],
+				bullets: ['Timeouts and retry budgets are defined before breaker thresholds', 'State scope matches the capacity and isolation promise', 'Fallbacks are tested and do not invent success', 'Circuit state changes alert without causing alert storms', 'Open duration and thresholds are adjustable without a code redeploy where practical', 'Operators can inspect, reset, and explain a circuit decision', 'Dashboards show dependency health, breaker state, retries, fallbacks, and caller impact', 'A runbook covers dependency outage, false opens, recovery probes, and rollback'],
+			},
+		],
+	},
+	{
 		slug: 'ai-workflow-automation-small-business',
 		title: 'AI Workflow Automation for Small Business: A Practical 2026 Playbook',
 		seoTitle: 'AI Workflow Automation for Small Business | PilotLab',

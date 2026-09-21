@@ -3448,4 +3448,71 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-resource-hints-without-slowing-site',
+		title: 'How to Use Resource Hints Without Making a Website Slower',
+		seoTitle: 'Resource Hints: Preconnect, Preload and DNS Prefetch | PilotLab',
+		dek: 'A measured guide to preconnect, dns-prefetch, preload, and prefetch for marketing sites and web apps—what to add, what to avoid, and how to verify the result.',
+		published: '2026-09-21',
+		updated: '2026-09-21',
+		readTime: '8 min read',
+		category: 'Web performance',
+		keyword: 'how to use resource hints without slowing a website',
+		intro: 'Resource hints can shorten the time between a browser discovering a critical resource and actually fetching it. They can also compete with the stylesheet, image, or script that matters more. This tutorial gives small product teams a practical way to choose hints from a real waterfall, add them with the correct attributes, and remove them when the evidence does not improve the page.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'web.dev — Assist the browser with resource hints', url: 'https://web.dev/learn/performance/resource-hints' },
+			{ label: 'MDN — rel="preconnect"', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preconnect' },
+			{ label: 'MDN — rel="dns-prefetch"', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/dns-prefetch' },
+			{ label: 'MDN — rel="preload"', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload' },
+		],
+		sections: [
+			{
+				heading: 'Start with a waterfall, not a checklist',
+				paragraphs: [
+					'Only add a hint when you can name the resource, the page state that needs it, and the delay you are trying to remove. Open a representative page in an incognito browser window, disable extensions, record a cold-load trace on a throttled mobile profile, and inspect the Network waterfall. Repeat with a warm cache and at least one real device before deciding that a hint helped.',
+					'Look for a critical cross-origin connection that starts late, a resource discovered only after CSS or JavaScript runs, or a likely next navigation that users commonly take. If the browser already discovers the resource early, adding a hint may create duplicate work or steal bandwidth from a more important request.',
+				],
+				bullets: ['Record the page, device profile, URL, and cache state', 'Identify the request whose discovery or connection time is actually material', 'Measure a baseline before changing the head', 'Change one hint at a time and keep a rollback'],
+			},
+			{
+				heading: 'Use preconnect for one or two critical origins',
+				paragraphs: [
+					'`preconnect` asks the browser to begin the connection handshake to a cross-origin origin before the page discovers the resource. That can include DNS, TCP, and TLS work for HTTPS. It is a good candidate for an origin serving a critical font, hero image, or API response that the current page will request very soon.',
+					'Keep the list short. MDN and web.dev both caution that preconnecting to many third-party domains can be counterproductive. For a CORS-enabled resource such as a font, match the eventual request mode with `crossorigin`: for example, `<link rel="preconnect" href="https://fonts.example" crossorigin>`. A preconnect to your own origin has no useful work to do when the browser already has that connection.',
+				],
+				bullets: ['Use an exact origin, including the scheme', 'Reserve it for a request needed very soon on this page', 'Add `crossorigin` when the eventual fetch uses CORS', 'Do not preconnect to every analytics, chat, or ad vendor'],
+			},
+			{
+				heading: 'Use dns-prefetch as the cheaper fallback',
+				paragraphs: [
+					'`dns-prefetch` resolves a domain name early but does not open the full connection. It is a lower-cost option for a secondary cross-origin request when preconnect would spend too much connection capacity or when the request may happen later. The browser may ignore hints, so treat them as opportunities rather than guarantees.',
+					'Keep third-party origins intentional. A tag manager can introduce more hosts than your page source makes obvious, and a consent decision may mean a vendor is never requested. Add a DNS hint only for an origin that is allowed to load and is likely to be used; otherwise the hint still adds speculative work with no user benefit.',
+				],
+			},
+			{
+				heading: 'Use preload only for a known, current-page need',
+				paragraphs: [
+					'`preload` tells the browser to fetch a resource early, before its normal discovery point. It is most defensible when a critical resource is hidden inside CSS, a script, or a late-rendered component. Specify the correct `as` value so the browser applies the right request semantics and cache entry—for example `font`, `image`, `script`, `style`, or `fetch`.',
+					'Every preload should have a matching eventual use. An unused preload is not a harmless optimization: it consumes bandwidth and can compete with the resource that controls rendering. For fonts and fetches, make the `crossorigin` mode match the eventual request. Do not preload several alternate image formats when only one will be selected; preload the variant your audience is most likely to use, or let responsive image selection work normally.',
+				],
+				bullets: ['Preload a resource needed on this page, not a possible future page', 'Set `as` and, when useful, `type` accurately', 'Match CORS and credentials behavior', 'Check the browser console and waterfall for unused or duplicated fetches'],
+			},
+			{
+				heading: 'Treat prefetch as a prediction with a cost',
+				paragraphs: [
+					'`prefetch` is for a resource or document the user is likely to need next, not for the current page’s critical path. Use it only when the product has a strong navigation signal, such as a visible next article or a link the user has intentionally focused. Avoid speculative downloads for every card on a landing page, especially for metered connections or users who may never follow the link.',
+					'Honor user choices and network conditions. Do not use prefetch to hide a slow architecture or to download authenticated data before the user has permission to request it. The browser can decline the hint, and your application still needs a normal loading and error path when the prefetched response is absent or stale.',
+				],
+			},
+			{
+				heading: 'Verify the change and keep a removal rule',
+				paragraphs: [
+					'Compare the changed page with the baseline in a fresh session. Inspect connection timing, request priority, the critical rendering path, the LCP candidate, total bytes, and unused preloads. Run at least several repetitions because network variance can hide a regression. A hint is successful only if the user-visible metric or a clearly bounded prerequisite improves without moving the cost to another critical request.',
+					'Test the failure modes: the third-party origin is slow, the font fails, consent blocks the vendor, the responsive image chooses another format, and the user navigates somewhere else. Remove a hint when the resource is no longer critical, a dependency changed, the hint is unused, or it worsens the waterfall. Performance work is maintenance, not a permanent collection of tags.',
+				],
+				bullets: ['Baseline and post-change traces use the same page and network profile', 'The critical request starts earlier without starving CSS or the LCP resource', 'There is no duplicate download or console warning', 'Unused preloads are removed rather than tolerated', 'Third-party hints respect consent, privacy, and failure paths', 'A real-user or synthetic metric is watched after release'],
+			},
+		],
+	},
 ];

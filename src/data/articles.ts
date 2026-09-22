@@ -96,6 +96,82 @@ export const articles: Article[] = [
 		],
 	},
 	{
+		slug: 'design-bulk-api-operations-with-background-jobs',
+		title: 'How to Design Bulk API Operations with Background Jobs',
+		seoTitle: 'Bulk API Operations with Background Jobs | PilotLab',
+		dek: 'A practical pattern for importing, exporting, or updating many records without request timeouts: accept the work, track progress, make retries safe, and explain partial results.',
+		published: '2026-09-22',
+		updated: '2026-09-22',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to design bulk API operations with background jobs',
+		intro: 'A bulk operation is not a normal request with a larger limit. Once an import, export, or multi-record update can outlive an HTTP timeout, it needs its own contract for acceptance, progress, cancellation, retries, and partial failure. This tutorial shows a provider-neutral design for a bulk API that returns quickly while preserving enough state for a client and an operator to understand what happened.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9110 — 202 Accepted', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-202-accepted' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+			{ label: 'AWS Prescriptive Guidance — Asynchronous API patterns', url: 'https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/asynchronous-api.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: define the bulk operation contract',
+				paragraphs: [
+					'Use this pattern when the work may exceed the client or gateway deadline, needs controlled concurrency, or must survive a web-process restart. You need an authenticated API, a durable operation store, a queue or job runner, and a status endpoint. Keep the request payload in object storage or a database when it is large; the queue message should carry an operation ID and a reference, not an unbounded copy of the data.',
+					'Start with the result the caller needs. An export may produce a downloadable file, an import may report accepted and rejected rows, and a bulk update may need a count plus an error report. Decide whether the operation is all-or-nothing or deliberately partial before implementation. A generic “processed” status is not enough when some records succeeded and others did not.',
+				],
+				bullets: ['Name the operation type, owner, input reference, and expected result', 'Set a maximum item count, payload size, and total runtime', 'Define queued, running, cancelling, succeeded, partially_failed, and failed states', 'Choose what the caller can cancel and what cannot be undone', 'Specify retention for status records, source files, and error reports'],
+			},
+			{
+				heading: 'Accept work with 202 and a status resource',
+				paragraphs: [
+					'Create the operation, validate authorization and input, persist the initial state, and enqueue the work. Return HTTP 202 Accepted only when the server has accepted the request for processing; RFC 9110 notes that the eventual outcome is not indicated by that response. Return an operation ID and a status URL such as GET /bulk-operations/{id}, and document how the client learns that the result is ready.',
+					'The create path must have a clear failure boundary. If the database record is committed but the queue publish fails, an outbox or equivalent recovery process should publish the pending command. If the queue accepts a message but the operation record is missing, the worker should reject and surface the inconsistency rather than inventing state. Never return 202 after only storing the request in process memory.',
+				],
+				bullets: ['Validate tenant, permissions, item count, and source format before enqueueing', 'Return 202 with an operation ID and a status URL', 'Make a repeated create request safe with an idempotency key', 'Persist the operation before it becomes visible to a worker', 'Use an outbox or reconciliation job when record and queue cannot be atomic'],
+			},
+			{
+				heading: 'Make progress meaningful and bounded',
+				paragraphs: [
+					'Progress should describe work the system can actually measure. For a batch, store total items when known, completed items, failed items, skipped items, and the last durable checkpoint. If the input is a stream whose total is unknown, expose a phase such as reading, processing, or finalizing instead of displaying a made-up percentage. Keep status writes less frequent than item writes so progress tracking does not become the bottleneck.',
+					'Use a stable response shape. For example, status can include id, state, counts, created_at, updated_at, started_at, completed_at, result_url, and error_summary. Keep detailed row errors in a separate report with access control. Polling is simple and often sufficient; webhooks or server-sent events can reduce polling when the product needs near-real-time updates, but they do not replace the durable status resource.',
+				],
+				bullets: ['Never expose another tenant’s operation by guessing an ID', 'Update counts transactionally with the unit of work or checkpoint', 'Use monotonic counters and define how retries affect them', 'Return a safe summary for failures and a protected detailed report', 'Set a polling interval and a terminal-state rule in the client contract'],
+			},
+			{
+				heading: 'Design each item for retry and partial failure',
+				paragraphs: [
+					'At-least-once delivery means a worker can receive the same batch or item again. Give every item a stable operation-scoped key, enforce uniqueness where the business effect must happen once, and make outbound calls reuse an idempotency key when the provider supports one. A “completed” flag checked in application code is not enough if two workers race or a process dies after the side effect but before the flag is written.',
+					'Classify errors before deciding what to do. A temporary dependency timeout can be retried with bounded backoff; invalid input, missing permission, and an unsupported record should be recorded as item failures without retrying forever. For all-or-nothing behavior, stage changes and commit only after validation, or use a compensating operation. Do not call a batch atomic if it can leave half the records changed.',
+				],
+				bullets: ['Give each item a deterministic key and attempt record', 'Retry only transient failures within a total operation budget', 'Separate retryable, permanent, and operator-review errors', 'Keep side effects idempotent even when the worker crashes', 'Expose whether the result is complete, partial, or awaiting intervention'],
+			},
+			{
+				heading: 'Control concurrency, cancellation, and fairness',
+				paragraphs: [
+					'Bulk work can overwhelm the same database or API that the foreground product needs. Set worker concurrency from measured downstream capacity, not from the number of CPU cores alone. Apply separate limits for expensive operation types and tenants when one customer could otherwise occupy the whole queue. Backpressure is part of the API behavior: reject or schedule work when the system cannot accept another operation safely.',
+					'Cancellation needs an explicit meaning. Mark a requested operation as cancelling, stop claiming new items, and let in-flight work finish or time out. A process kill is not cancellation; it can leave an external side effect committed. If the operation cannot safely roll back, report the completed and remaining counts and provide a recovery or reconciliation path instead of promising that cancellation erased the past.',
+				],
+				bullets: ['Cap concurrent operations and per-operation item concurrency', 'Reserve capacity for interactive traffic', 'Stop claiming new work after cancellation is durable', 'Use leases or visibility timeouts longer than normal item work', 'Alert on queue age, retry amplification, stuck operations, and tenant imbalance'],
+			},
+			{
+				heading: 'Verify the contract with failure-injection tests',
+				paragraphs: [
+					'Test the API and worker together. Submit a valid small batch and verify the 202 response, status transitions, final result, and retention behavior. Submit the same request with the same idempotency key and expect the original operation rather than a duplicate. Then kill a worker after an item side effect and before its checkpoint; the restarted worker must converge on one correct business result.',
+					'Exercise partial failure, queue outage, malformed input, authorization changes, cancellation during processing, a full tenant queue, and an expired result URL. Check the database query plans and storage limits with a realistic batch, not only ten test records. An operation is ready when clients can distinguish “still running” from “failed,” and operators can safely retry or reconcile it without guessing.',
+				],
+				bullets: ['A duplicate create does not create a second logical operation', 'A duplicate item delivery does not duplicate its business effect', 'A worker crash resumes from durable state', 'Permanent item errors do not consume infinite retries', 'Cancellation stops new work and reports already completed work', 'A queue or database outage produces an observable, recoverable state', 'Cross-tenant status, source, and result access tests are negative by default'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'An asynchronous bulk API trades immediate simplicity for durable coordination. The user gets a responsive request and a recoverable operation, while the team takes on status storage, worker capacity, retry policy, retention, and support tooling. That trade is worthwhile when the alternative is a request that times out after making unknown partial changes.',
+					'Keep the public contract independent of the queue library. Microsoft’s API guidance emphasizes resource-oriented, stateless interfaces, while AWS describes asynchronous designs as a way to separate request acceptance from longer processing. Use those boundaries to keep implementation replaceable. Document limits, terminal states, partial-result semantics, authentication, and replay behavior before customers depend on them.',
+				],
+				bullets: ['The create endpoint has a durable acceptance boundary and 202 semantics', 'Status is tenant-scoped, observable, and retained for a documented period', 'Inputs and result files have size, access, and deletion policies', 'Workers use idempotent effects, leases, bounded retries, and dead-letter handling', 'Progress distinguishes known counts from estimates', 'Cancellation and partial failure have explicit user-visible semantics', 'Dashboards cover queue age, duration, throughput, failure classes, and cost', 'A runbook explains replay, reconciliation, stuck jobs, and safe rollback'],
+			},
+		],
+	},
+	{
 		slug: 'ai-workflow-automation-small-business',
 		title: 'AI Workflow Automation for Small Business: A Practical 2026 Playbook',
 		seoTitle: 'AI Workflow Automation for Small Business | PilotLab',

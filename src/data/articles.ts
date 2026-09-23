@@ -3591,4 +3591,81 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-resilient-websocket-reconnect-nodejs',
+		title: 'How to Build a Resilient WebSocket Reconnect Flow',
+		seoTitle: 'Build a Resilient WebSocket Reconnect Flow | PilotLab',
+		dek: 'A practical protocol for reconnecting browser clients without duplicate actions, lost state, or a thundering herd when your API or network recovers.',
+		published: '2026-09-23',
+		updated: '2026-09-23',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to build a resilient WebSocket reconnect flow',
+		intro: 'A WebSocket connection is a useful low-latency channel, not a guarantee that a client is continuously connected. Phones sleep, Wi-Fi changes, proxies close idle connections, deployments replace processes, and servers restart. A reliable product treats reconnecting as a protocol: reconnect with backoff, prevent a fleet of clients from retrying together, re-authenticate deliberately, and resynchronize state before accepting new actions.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — The WebSocket API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API' },
+			{ label: 'MDN — WebSocket: close event', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close_event' },
+			{ label: 'IETF RFC 6455 — The WebSocket Protocol', url: 'https://www.rfc-editor.org/rfc/rfc6455' },
+			{ label: 'MDN — WebSocket: bufferedAmount', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/bufferedAmount' },
+		],
+		sections: [
+			{
+				heading: 'Define what a connection means',
+				paragraphs: [
+					'You need a browser client, a WebSocket endpoint, an authenticated session model, and a durable source of truth for the state the client displays. Decide whether the socket carries notifications, collaborative edits, job progress, or commands. The reconnect policy depends on that choice: a notification can be missed and fetched later, while a collaborative edit needs a sequence or version that lets the client detect a gap.',
+					'MDN describes WebSocket as a two-way interactive communication session between browser and server, while RFC 6455 defines the opening handshake and framing protocol. Neither specification gives your application durable delivery, replay, authentication renewal, or exactly-once actions. Those are application-level contracts you must design explicitly.',
+				],
+				bullets: ['Name which messages are ephemeral and which must be recoverable', 'Choose a server-owned resource or snapshot endpoint for resynchronization', 'Define a client state machine: idle, connecting, open, resyncing, and closed', 'Give every command a client-generated idempotency key when repeating it could duplicate a side effect', 'Decide how logout, token expiry, and account switching close the channel'],
+			},
+			{
+				heading: 'Reconnect with bounded exponential backoff and jitter',
+				paragraphs: [
+					'When the socket closes unexpectedly, do not reconnect in a tight loop. Start with a short delay, increase it after each failure, cap the delay, and add random jitter. Backoff protects your server during an outage; jitter prevents thousands of clients that noticed the same deployment from reconnecting on the same schedule. Reset the attempt counter only after a connection has stayed healthy long enough to count as recovered.',
+					'Keep one reconnect timer and one socket reference. A close event from an old socket must not schedule another attempt after a newer socket has opened. Treat deliberate application closes differently from network failures: logout and a server policy rejection should transition to closed or re-authentication rather than silently retrying forever.',
+				],
+				bullets: ['Use a capped delay such as min(maxDelay, baseDelay × 2^attempt)', 'Add full or equal jitter so clients spread their attempts', 'Stop retrying while the browser is offline and resume on an online signal', 'Reset backoff only after a stable open period, not immediately after the handshake', 'Expose attempt count, delay, close code, and last failure category in safe diagnostics'],
+			},
+			{
+				heading: 'Authenticate the handshake and every sensitive action',
+				paragraphs: [
+					'Reconnecting is a new connection, not a continuation that the server should trust automatically. Establish the authenticated identity through the mechanism supported by your deployment, validate it at the handshake or first protocol message, and reject expired or revoked credentials. Do not put long-lived bearer tokens in a URL where they can leak through logs and proxy metadata. If the access token expires while the socket is open, send a typed re-authentication event or close with a documented policy and let the normal sign-in flow obtain a fresh credential.',
+					'Authorization still belongs on the server for each command and subscription. A socket authenticated as a tenant member does not automatically authorize every resource in that tenant. Bind subscriptions to server-checked resource IDs, remove them on permission changes where required, and close or downgrade the connection when the account context changes.',
+				],
+				bullets: ['Never accept tenant or user identity solely from a client message', 'Validate origin and deployment-specific cross-site policy at the edge', 'Apply authorization to subscriptions, commands, and resource snapshots', 'Use short-lived credentials or a controlled refresh path', 'Return safe protocol error codes without revealing account or permission details'],
+			},
+			{
+				heading: 'Resynchronize before sending new commands',
+				paragraphs: [
+					'After reconnecting, assume the client missed messages. Send a snapshot request or a resume token containing the last sequence the client applied. The server can replay events still inside its retention window; if the sequence is too old or unknown, return a full snapshot and a new sequence. Apply the snapshot atomically from the UI’s point of view, then process newer events in order.',
+					'Keep the socket as a delivery optimization, not the only copy of state. A GET endpoint or durable job status resource should be able to repair a missed update even when the socket is unavailable. If a user can submit commands, pause the command queue while resynchronizing or attach commands to the resource version they were based on. Otherwise a stale browser can overwrite a newer server state immediately after reconnecting.',
+				],
+				bullets: ['Include a monotonic sequence or resource version in state-bearing messages', 'Detect gaps instead of silently applying events out of order', 'Replay from durable retention when possible; fall back to a full snapshot', 'Do not render “connected” as “synchronized” until repair completes', 'Use optimistic UI only when the command has an acknowledgement and rollback path'],
+			},
+			{
+				heading: 'Control heartbeats, queues, and slow consumers',
+				paragraphs: [
+					'An open TCP connection does not prove that the path or peer is usable. Use an application heartbeat when your infrastructure can silently remove idle connections, and configure the server to close peers that stop responding. Keep heartbeat intervals below the shortest relevant idle timeout, but do not choose an aggressive interval that wastes battery and connection capacity on mobile clients. WebSocket ping and pong behavior may be handled by the server library; document which side owns liveness.',
+					'Bound outbound memory. The browser exposes bufferedAmount so an application can see bytes queued but not yet transmitted. Do not enqueue unbounded updates for a client that cannot keep up. Coalesce replaceable state, drop ephemeral progress when safe, apply a per-connection queue limit, and close or downgrade a slow consumer with a reason it can recover from. Durable events belong in storage or a broker, not in an infinite socket buffer.',
+				],
+				bullets: ['Measure connection age, heartbeat failures, close codes, and reconnect rate', 'Set an idle policy that matches proxies, load balancers, and mobile behavior', 'Cap per-client buffered bytes and queued messages', 'Coalesce state updates that supersede one another', 'Keep durable replay data separate from the live connection buffer'],
+			},
+			{
+				heading: 'Verify outages, deploys, and duplicate actions',
+				paragraphs: [
+					'Test the browser and server together. Start with a connection that receives a snapshot and an update, then drop the network, restart the server, and reconnect with the last applied sequence. Verify that the client reaches the same state without applying an event twice. Repeat with a gap outside retention and confirm that the full-snapshot path works. Test an expired credential, a revoked permission, an intentional logout, and a server close code that should not be retried.',
+					'Load-test the recovery path, not only steady-state messages. Disconnect a representative number of clients at once and observe handshake rate, authentication work, snapshot queries, memory, and downstream load. Make a command fail after the network drops and retry it with the same idempotency key; the server should return the original outcome or a safe status rather than performing the side effect twice. Inspect a real reverse proxy or ingress because buffering, idle timeouts, and upgrade handling often differ from local development.',
+				],
+				bullets: ['Unexpected close triggers one jittered reconnect sequence', 'Old sockets cannot schedule attempts after a newer socket opens', 'A reconnect detects gaps and repairs from replay or snapshot', 'A duplicate command key produces one business effect', 'Expired credentials require re-authentication rather than infinite retry', 'Slow consumers are bounded and do not exhaust process memory', 'Deploying one server instance does not strand clients without a recovery path', 'Dashboards show connection count, age, reconnects, close reasons, queue size, and sync failures'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'WebSockets are a transport choice, not a replacement for an API contract. They can reduce polling latency, but they add connection lifecycle, fan-out, load-balancer, authorization, and deployment concerns. For simple job progress, polling or server-sent events may be easier to operate. For bidirectional collaboration, the extra protocol work can be justified when the product has a clear interaction need and a durable state model behind it.',
+					'Keep the first version narrow: one resource, one message envelope, one resynchronization path, and one observable reconnect policy. Document the close codes and message schema, make the HTTP snapshot endpoint authoritative, and give operators a way to drain connections during deploys. Reliability comes from convergence after interruption, not from pretending a socket never disconnects.',
+				],
+				bullets: ['The message schema, authentication, authorization, and close-code policy are documented', 'Reconnect uses capped exponential backoff with jitter and no duplicate timers', 'State has sequence or version information and a durable repair path', 'Commands are acknowledged and protected against duplicate side effects', 'Heartbeats and idle timeouts match every proxy and load-balancer hop', 'Slow consumers have memory limits and a defined downgrade or close behavior', 'Deploy, restart, offline, token expiry, permission change, and replay tests are repeatable', 'Polling or server-sent events remain available when they better fit the workload'],
+			},
+		],
+	},
 ];

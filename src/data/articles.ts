@@ -3668,4 +3668,80 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'configure-cors-nodejs-api-safely',
+		title: 'How to Configure CORS for a Node.js API Safely',
+		seoTitle: 'Configure CORS for a Node.js API Safely | PilotLab',
+		dek: 'A practical guide to browser cross-origin requests: allow the origins you own, handle preflight and credentials correctly, and verify the policy without turning CORS into a security boundary.',
+		published: '2026-09-24',
+		updated: '2026-09-24',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to configure CORS for a Node.js API safely',
+		intro: 'CORS errors often look like a server bug, but the browser is enforcing a deliberate contract between a web origin and an API. The fix is not to add a wildcard until the console goes quiet. It is to identify the callers, answer preflight requests accurately, keep credentials scoped, and remember that CORS controls browser reads—not authentication or authorization. This tutorial gives small product teams a provider-neutral policy they can implement and test at the API boundary.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — Cross-Origin Resource Sharing', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS' },
+			{ label: 'web.dev — Cross-Origin Resource Sharing', url: 'https://web.dev/articles/cross-origin-resource-sharing' },
+			{ label: 'WHATWG Fetch Standard — CORS protocol and credentials', url: 'https://fetch.spec.whatwg.org/#http-cors-protocol' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: name the origin and the trust boundary',
+				paragraphs: [
+					'You need a browser client, an API that receives the request, a list of intended web origins, and a test environment where you can inspect request and response headers. An origin is the combination of scheme, host, and port, so https://app.example.com and https://www.example.com are different origins even when they belong to the same company. Record each production, preview, and local-development origin explicitly.',
+					'CORS is a browser-enforced mechanism that lets a server state which other origins may read a response. It does not stop a non-browser client from sending HTTP, does not replace authentication, and does not authorize a tenant or resource. The API must still authenticate and authorize every request, including requests that do not come from a browser.',
+				],
+				bullets: ['List exact allowed origins, including scheme and port', 'Separate production, preview, and local policies', 'Decide whether the API uses cookies, bearer tokens, or neither', 'List methods and request headers the browser client actually needs', 'Keep authentication and authorization independent of CORS'],
+			},
+			{
+				heading: 'Start with the smallest simple-request policy',
+				paragraphs: [
+					'A cross-origin browser request includes an Origin header. If the API wants the browser to expose the response to the calling script, it returns Access-Control-Allow-Origin with either the matching origin or, for genuinely public non-credentialed data, *. MDN describes the browser same-origin policy and CORS headers as the mechanism that controls this sharing. Do not reflect any Origin value without checking it against an allowlist.',
+					'For a public GET endpoint with no cookies and no sensitive response, a wildcard can be appropriate. It is not a general “allow my frontend” setting. If a response varies by origin, add Vary: Origin so an intermediary does not reuse a response generated for one origin when serving another. Keep the policy at the edge or API middleware, but make its source configuration reviewable.',
+				],
+				bullets: ['Allow only origins that are present in a trusted configuration', 'Return the matching origin, not a user-supplied origin by default', 'Use Access-Control-Allow-Origin: * only for public, non-credentialed reads', 'Add Vary: Origin when the response changes by allowed origin', 'Do not treat CORS success as proof that the caller is authorized'],
+			},
+			{
+				heading: 'Handle preflight requests as a contract',
+				paragraphs: [
+					'Browsers preflight many cross-origin requests with OPTIONS before sending the actual request. The preflight includes Origin, Access-Control-Request-Method, and sometimes Access-Control-Request-Headers. The server must check the origin, requested method, and requested headers, then return only the permissions it intends to grant. A successful preflight does not itself perform the business operation.',
+					'For example, a JSON PATCH request with an Authorization header may need a response containing Access-Control-Allow-Origin with the approved origin, Access-Control-Allow-Methods: PATCH, and Access-Control-Allow-Headers: Authorization, Content-Type. Match header names case-insensitively, reject methods or headers outside the route contract, and return a clear non-success response for an unapproved origin rather than broadening the policy.',
+				],
+				bullets: ['Answer OPTIONS without requiring the business handler to mutate state', 'Validate Origin, requested method, and requested headers together', 'Allow only methods the API route actually supports', 'Allow only headers the browser client needs', 'Cache preflight responses only for a deliberate, documented lifetime'],
+			},
+			{
+				heading: 'Treat credentials as a separate security decision',
+				paragraphs: [
+					'Cookies and other credentials change the risk. When a browser request uses credentials, the server must return a specific allowed origin and Access-Control-Allow-Credentials: true; a wildcard origin cannot be used for that credentialed sharing pattern. web.dev documents the corresponding fetch credentials option and the requirement for an explicit origin in the response.',
+					'Credentialed CORS does not make cookies safe by itself. Use secure, appropriately scoped cookies, a CSRF defense where cookie authentication is used, and server-side authorization. If the client uses Authorization headers instead of cookies, the header still needs to be permitted in preflight, but the token remains an application credential that must be validated and protected. Never put long-lived tokens in query strings just to avoid a preflight.',
+				],
+				bullets: ['Never combine Access-Control-Allow-Credentials: true with a wildcard origin', 'Return credentials permission only for origins that need it', 'Configure cookie Secure, SameSite, Domain, and Path deliberately', 'Use CSRF protection for state-changing cookie-authenticated requests', 'Authenticate and authorize the actual request after CORS checks'],
+			},
+			{
+				heading: 'Expose only response headers the client needs',
+				paragraphs: [
+					'CORS has separate controls for request headers and response headers. A browser script cannot read every response header from a cross-origin response just because the network request succeeded. If the client needs a request ID, rate-limit hint, or pagination cursor in a custom response header, list it in Access-Control-Expose-Headers. Do not expose Set-Cookie or internal diagnostic headers as a substitute for a documented API response.',
+					'Keep the public response shape usable without relying on browser-only behavior. Put business data in JSON, return safe error details, and keep secrets out of both bodies and headers. If an endpoint returns a redirect, file, or streaming response, test the browser behavior separately; a policy that works for JSON may not match the resource and caching behavior of every route.',
+				],
+				bullets: ['Allow request headers only through Access-Control-Allow-Headers', 'Expose custom response headers through Access-Control-Expose-Headers', 'Use stable JSON fields for business data and pagination where practical', 'Do not expose cookies, authorization material, or internal stack details', 'Apply the same tenant and resource authorization to every response'],
+			},
+			{
+				heading: 'Verify in a real browser and with curl',
+				paragraphs: [
+					'Test both the preflight and the actual request. From an allowed origin, send an OPTIONS request with the same method and headers the browser will use, then check that the response grants exactly those values. Repeat from an unapproved origin and confirm that the browser cannot read the response. Use curl to inspect headers, but do not treat curl success as proof that browser JavaScript can access the body; curl does not enforce the same-origin policy.',
+					'Use browser developer tools to inspect the Origin, OPTIONS response, actual request, and console error. Exercise credentialed and non-credentialed paths, a missing authorization token, a disallowed custom header, redirects, cached responses, and a deployed preview origin. Log policy decisions without logging tokens or personal data. A CORS change is ready when legitimate clients work and an untrusted origin is not accidentally granted read access.',
+				],
+				bullets: ['Allowed origin plus simple GET returns the expected readable response', 'Allowed origin plus JSON POST or PATCH passes preflight and reaches authorization', 'Disallowed origin is not reflected in Access-Control-Allow-Origin', 'Credentialed requests use an explicit origin and succeed only when intended', 'A disallowed method or header fails preflight without a side effect', 'Vary: Origin is present where intermediary caching can mix variants', 'Browser and curl checks agree on headers, while browser access is verified separately', 'Production, preview, and local origins are tested independently'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Prefer a narrow, version-controlled policy over a permissive middleware default. Keep origin configuration separate by environment, review additions like access grants, and remove preview origins when they expire. If many products need different policies, make the API contract explicit per route or audience instead of accumulating a global list that nobody can explain.',
+					'CORS is one browser boundary in a larger API security design. It cannot prevent direct requests, fix a broken authorization check, guarantee CSRF safety, or make a secret safe in frontend JavaScript. The useful outcome is an API that is intentionally callable from the web applications you own and no more permissive than the product requires.',
+				],
+				bullets: ['Origin allowlists are explicit, environment-specific, and reviewed', 'Preflight responses are side-effect free and bounded', 'Credential policy, cookie policy, CSRF defense, and authorization are documented separately', 'Only required methods, request headers, and response headers are exposed', 'Caching behavior includes Vary: Origin where needed', 'Browser tests cover allowed, denied, credentialed, preview, and failure paths', 'Monitoring and runbooks explain policy changes without recording secrets'],
+			},
+		],
+	},
 ];

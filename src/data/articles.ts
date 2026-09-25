@@ -3744,4 +3744,80 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'test-nodejs-api-failure-paths-built-in-runner',
+		title: 'How to Test Node.js API Failure Paths with the Built-In Test Runner',
+		seoTitle: 'Test Node.js API Failure Paths | PilotLab',
+		dek: 'A hands-on testing strategy for APIs that fail usefully: exercise validation, dependency outages, deadlines, authorization, and cleanup with Node’s built-in test runner.',
+		published: '2026-09-25',
+		updated: '2026-09-25',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to test Node.js API failure paths',
+		intro: 'An API test suite that checks only successful JSON responses can still miss the failures customers and operators actually experience. This tutorial uses Node.js’s built-in test runner and a controllable HTTP dependency to test rejection paths at the application boundary: invalid input, missing authorization, upstream errors, timeouts, duplicate requests, and shutdown cleanup. The goal is not maximum coverage; it is confidence that the service fails predictably and releases the resources it owns.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — Test runner', url: 'https://nodejs.org/api/test.html' },
+			{ label: 'Node.js Documentation — Assert', url: 'https://nodejs.org/api/assert.html' },
+			{ label: 'Node.js Documentation — HTTP server', url: 'https://nodejs.org/api/http.html#class-httpserver' },
+		],
+		sections: [
+			{
+				heading: 'Define the failure contract before writing tests',
+				paragraphs: [
+					'The useful question is not “does this route return 200?” It is “what does the caller observe when each dependency or input assumption fails?” Write the contract for status, response shape, side effects, logs, and cleanup. A malformed request should not reach the database. A missing permission should not reveal whether another tenant’s record exists. An upstream timeout should not leave a request, socket, or worker running without a bound.',
+					'Keep tests at the HTTP boundary for behavior that belongs to the API: routing, middleware order, authentication, serialization, status codes, and error mapping. Unit-test pure policy separately. Do not replace every dependency with a mock; one small controllable HTTP server often catches more integration mistakes than a large collection of mocked method calls.',
+				],
+				bullets: ['List expected outcomes for 2xx, 4xx, 5xx, timeout, and cancellation', 'Name which failures must have no side effect', 'Define whether error bodies are public, support-safe, and machine-readable', 'Identify resources that must be closed in teardown', 'Choose a test database or fixture strategy that can run repeatedly'],
+			},
+			{
+				heading: 'Start an isolated server on an ephemeral port',
+				paragraphs: [
+					'Node’s test runner can execute asynchronous tests and subtests, while the HTTP module can create a real local server. Start the application with port 0 so the operating system selects an available port, then obtain the bound address and send requests with fetch. This exercises the actual HTTP parser, middleware, headers, and response serialization without binding a fixed development port or depending on an external environment.',
+					'Create the server in a setup hook and close it in teardown. Node documents server.close() as the operation that stops accepting new connections and completes after existing connections finish. A test that forgets to close its server may pass but leave open handles, hang the runner, or interfere with the next file. Make teardown fail visibly when cleanup itself reports an error.',
+				],
+				bullets: ["import { after, before, test } from 'node:test';", "import assert from 'node:assert/strict';", "await new Promise<void>((resolve) => server.listen(0, resolve));", 'Build the base URL from server.address(), never from a hard-coded test port.'],
+			},
+			{
+				heading: 'Use a controllable upstream instead of sleeping blindly',
+				paragraphs: [
+					'Create a second local HTTP server with explicit modes: immediate success, invalid JSON, 500 response, delayed headers, delayed body, and connection close. Let each test select the mode through a safe fixture rather than changing global state. This makes the cause of a failure deterministic and lets you assert that the API translates it according to its contract.',
+					'Avoid tests that simply sleep for a large duration and hope a timeout wins. Use a promise that the test controls, or a small delay comfortably above the application deadline. Record how many upstream requests arrived and which headers were sent. Those observations can prove that a validation failure did not call the dependency, a retry happened only when allowed, and a caller cancellation propagated to the upstream operation.',
+				],
+				bullets: ['Success returns the expected validated representation', 'Malformed upstream data becomes a safe application error', 'A 5xx or timeout maps to the documented degraded response', 'A slow upstream is aborted within a bounded test window', 'The upstream request count matches the retry and idempotency policy', 'Test fixtures cannot leak credentials or customer-shaped data into logs'],
+			},
+			{
+				heading: 'Test authorization and validation as negative behavior',
+				paragraphs: [
+					'Negative tests should be the default, not a final security sweep. Send a missing token, an expired token, a token for another tenant, an invalid path identifier, an oversized body, an unsupported content type, and malformed JSON. Assert both the status and the absence of the protected side effect. A response that says “forbidden” but still performs the update is a failed test even if the status looks correct.',
+					'Keep assertions precise without coupling them to incidental framework wording. Check a stable error code, status, and required fields; avoid snapshotting an entire response that contains timestamps, request IDs, or implementation details. Use strict assertions from node:assert so a type change or unexpected field shape is visible. The error body should help a legitimate client recover without exposing stack traces, SQL, tokens, or another tenant’s existence.',
+				],
+				bullets: ['Unauthorized requests never reach the protected business operation', 'Tenant identity comes from verified authentication, not a request body or header', 'Validation failures identify the input problem without echoing secrets', 'Unsupported methods and media types have deliberate responses', 'A repeated request follows the documented idempotency behavior', 'Error logs contain correlation context but no credentials or raw payloads'],
+			},
+			{
+				heading: 'Exercise timeouts, retries, and partial failure',
+				paragraphs: [
+					'Failure behavior is often a race between the API deadline and the dependency. Test a fast upstream, a delayed header, a delayed body, a response that fails after one retry, and a dependency that never resolves. Assert the caller-visible deadline with a range rather than an exact duration, and verify that the operation stops doing work after cancellation. If the endpoint retries, assert the total number of upstream requests and that backoff remains inside the route’s overall budget.',
+					'Test ambiguous writes separately from safe reads. If the client loses the response after an upstream side effect, the API must use an idempotency key, query the provider, or return a state that can be reconciled. A test that only expects “500 on timeout” can bless duplicate charges or duplicate records. Include a crash or forced rejection between the external side effect and the local completion record when that boundary exists in production.',
+				],
+				bullets: ['A timeout returns before the caller’s hard deadline', 'Caller cancellation stops downstream work and suppresses retries', 'Only classified transient failures are retried', 'Retries stop when the total budget is exhausted', 'A partial side effect is idempotent, reconciled, or explicitly reported', 'Circuit-open or admission-limit failures are not retried as fresh calls'],
+			},
+			{
+				heading: 'Run the suite in CI and keep failures diagnosable',
+				paragraphs: [
+					'Run the same command locally and in CI with a predictable environment. Node’s test runner supports filtering and built-in reporting; use focused tests while developing, then run the complete suite before release. Parallel execution can expose shared fixture bugs, so isolate ports, tenant data, temporary files, and upstream modes. If a test must be serial because it protects a shared resource, document the reason rather than relying on accidental order.',
+					'When a test fails, print safe diagnostics: test name, route, request ID, expected and actual status, upstream mode, elapsed time, and cleanup state. Do not dump environment variables or full HTTP bodies. Add a test for the test harness itself: if the upstream server cannot start or the API readiness step fails, the suite should report setup failure instead of producing a page of misleading connection-refused assertions.',
+				],
+				bullets: ['Test files have one repeatable command and no fixed port dependency', 'Setup and teardown close servers, pools, timers, and temporary resources', 'Tests can run alone and in the full suite', 'CI failures include bounded, support-safe diagnostics', 'Slow or flaky tests are measured and fixed rather than retried indefinitely', 'Contract and failure-path tests run before deployment'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Integration tests cannot prove every production property. A local upstream does not reproduce every proxy, DNS, TLS, queue, database, or provider behavior. Keep a small set of tests against a sandbox or staging dependency where the contract matters, and complement them with metrics, traces, health checks, and failure drills. The purpose of the local suite is to make the application boundary fast and repeatable, not to pretend the network is simple.',
+					'Use the failure matrix as a release gate. For each route, you should be able to name what happens when input is invalid, authorization fails, the dependency is slow, the dependency returns an error, the process is shutting down, and a request is repeated. Tests are valuable when they encode those decisions and fail when a refactor silently changes them.',
+				],
+				bullets: ['Happy paths and negative paths assert status, body, and side effects', 'Dependency failures are controllable and covered at the HTTP boundary', 'Timeout and cancellation tests prove bounded work, not just a status code', 'Writes have duplicate and ambiguous-outcome tests', 'Fixtures are isolated across tenants and parallel test workers', 'Cleanup is explicit and verified', 'CI runs the suite before build or deployment', 'Operational signals cover the same failure classes tested in code'],
+			},
+		],
+	},
 ];

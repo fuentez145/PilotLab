@@ -3820,4 +3820,72 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'zero-downtime-postgres-schema-migrations',
+		title: 'How to Run Zero-Downtime PostgreSQL Schema Migrations',
+		seoTitle: 'Zero-Downtime PostgreSQL Schema Migrations | PilotLab',
+		dek: 'A practical expand-migrate-contract workflow for changing a live PostgreSQL schema while old and new application versions may run at the same time.',
+		published: '2026-09-26',
+		updated: '2026-09-26',
+		readTime: '11 min read',
+		category: 'Platform engineering',
+		keyword: 'how to run zero-downtime PostgreSQL schema migrations',
+		intro: 'A database migration is also a deployment contract. During a rolling release, the old application and the new application can both use the database, and a lock or incompatible column change can turn an ordinary deploy into an outage. This tutorial uses PostgreSQL and the expand-migrate-contract pattern to make schema changes reversible, observable, and safe to roll out in stages.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'PostgreSQL Documentation — Modifying Tables', url: 'https://www.postgresql.org/docs/current/ddl-alter.html' },
+			{ label: 'PostgreSQL Documentation — CREATE INDEX', url: 'https://www.postgresql.org/docs/current/sql-createindex.html' },
+			{ label: 'Martin Fowler — Parallel Change', url: 'https://martinfowler.com/bliki/ParallelChange.html' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: map compatibility and rollback first',
+				paragraphs: [
+					'You need a migration runner that records applied versions, a tested backup and restore path, access to PostgreSQL lock and query metrics, and a deployment process that can briefly run old and new application versions together. Before writing SQL, identify the table, current readers and writers, expected row count, traffic pattern, and the previous application version that must continue to work.',
+					'Define rollback honestly. Application code can usually roll back from a feature flag or release artifact, but a destructive schema change may not be reversible without a restore. Treat dropping a column, changing a type, or rewriting a large table as a separate decommissioning project, not as cleanup attached to the first deploy.',
+				],
+				bullets: ['Write the old-schema and new-schema compatibility matrix', 'Measure table size, write rate, long transactions, and lock wait time', 'Take and restore-test a backup before destructive work', 'Choose a migration timeout and an operator who can stop it', 'Keep schema changes separate from application behavior changes when possible'],
+			},
+			{
+				heading: 'Use expand, migrate, then contract',
+				paragraphs: [
+					'The safe sequence is to expand the schema in a backward-compatible way, migrate application traffic and data, then contract only after the old path is gone. Martin Fowler describes this as parallel change: support both versions, move consumers incrementally, and remove the old version in a later phase. The extra deployment is the safety mechanism, not ceremony.',
+					'For a rename from users.display_name to users.full_name, expand by adding full_name while keeping display_name. Deploy code that can read full_name and fall back to display_name, and writes both values. Backfill existing rows in bounded batches. After metrics and consistency checks show that readers no longer need the old column, deploy code that uses only full_name, then remove display_name in a later maintenance window.',
+				],
+				bullets: ['Expand: add nullable columns, tables, indexes, or dual-write paths', 'Migrate: deploy compatible code, backfill, and move reads gradually', 'Verify: compare old and new values and observe error and latency signals', 'Contract: remove old reads and writes, then remove obsolete schema later', 'Keep each phase deployable and explainable on its own'],
+			},
+			{
+				heading: 'Add columns and constraints without surprising the writer',
+				paragraphs: [
+					'PostgreSQL documents that adding a column with a constant default can avoid rewriting every existing row, while a volatile default may require a lengthy update. That distinction is useful, but it is not a universal “fast migration” guarantee: locks, table size, PostgreSQL version, concurrent activity, and the exact constraint still matter. Test the statement against a production-shaped copy and set a lock timeout so it fails rather than waiting behind an unknown transaction.',
+					'For a new required value, add the column as nullable, deploy code that writes it, backfill rows in small committed batches, and check for remaining nulls. Add the constraint only after the data satisfies it. Avoid a single unbounded UPDATE during peak traffic; it can generate WAL, hold locks, compete with foreground queries, and make rollback harder.',
+				],
+				bullets: ['Prefer an additive nullable column in the first migration', 'Use an explicit constant default only when its semantics are correct', 'Backfill with a stable key range, small batches, and a pause or rate limit', 'Monitor lock waits, replication lag, WAL growth, CPU, and query latency', 'Add NOT NULL or CHECK only after a query proves existing rows comply'],
+			},
+			{
+				heading: 'Build large indexes concurrently and understand the trade-off',
+				paragraphs: [
+					'For a busy table, PostgreSQL supports CREATE INDEX CONCURRENTLY to build an index without taking the lock that prevents concurrent inserts, updates, or deletes. It is not free: it takes longer, does more work, and has caveats that the PostgreSQL documentation calls out. Run it as a migration with an operator-visible status, not as an incidental statement inside a transaction if your migration tool wraps every change in one.',
+					'An index is also a query and write-cost decision. Confirm the query shape uses the proposed index with EXPLAIN on representative data, and check whether an existing index already covers the access path. After creation, verify its validity and observe write latency, storage growth, and planner behavior. A new index that makes one read faster but exhausts disk or slows every write is not a successful migration.',
+				],
+				bullets: ['Use CREATE INDEX CONCURRENTLY for appropriate large, live tables', 'Check whether the migration tool permits the required non-transactional command', 'Name indexes explicitly and make reruns safe in your migration process', 'Inspect pg_stat_progress_create_index when available', 'Confirm query plans, index validity, disk headroom, and write impact'],
+			},
+			{
+				heading: 'Backfill and dual-write with an observable control loop',
+				paragraphs: [
+					'Data movement is application work, not just schema work. A backfill should be restartable, bounded, and safe to run more than once. Select rows by a stable primary-key range, update only rows that still need work, commit each batch, and record progress. If the source can change during the backfill, make the new application write both representations or run a reconciliation pass after the bulk copy.',
+					'Dual writes create a temporary consistency problem. Measure it directly: count missing values, compare normalized old and new values, and sample records with a support-safe diagnostic. Decide which field wins when the two values disagree. Do not hide a failed secondary write behind a successful primary write without a durable repair queue or alert; otherwise the migration can appear complete while the new path is incomplete.',
+				],
+				bullets: ['Use deterministic batches and persist the last completed key', 'Make the backfill idempotent and safe to resume after a crash', 'Track rows scanned, changed, skipped, failed, and remaining', 'Alert on dual-write failures instead of logging and continuing silently', 'Reconcile after backfill and before removing the old read path'],
+			},
+			{
+				heading: 'Verify the deployment and know when to stop',
+				paragraphs: [
+					'Test the exact migration against a copy with realistic row counts and concurrent traffic. Start an old application version, apply the expand migration, run the new version, then roll the application back while the expanded schema remains. Exercise a cancelled backfill, a lock timeout, a duplicate retry, a failed dual write, and a database restore. The goal is to prove that interruption leaves a state from which the process can safely resume.',
+					'Use a release checklist with a stop condition. Pause if lock waits or replication lag exceed the agreed budget, if the consistency count moves backward, if error rates rise, or if disk headroom is at risk. After the contract phase, keep the old migration and compatibility code identifiable until the retention and rollback window has passed. A migration is finished when the old contract is removed deliberately—not when the first new column exists.',
+				],
+				bullets: ['Route-level errors and latency remain within the release budget', 'Old and new application versions both pass contract tests', 'Backfill can resume and does not duplicate or lose business data', 'Dual-read or dual-write mismatches are zero or explained', 'Migration locks, duration, progress, and database impact are observable', 'Rollback restores application compatibility without requiring an emergency schema drop', 'The contract phase has an owner, a date, and a verified dependency inventory'],
+			},
+		],
+	},
 ];

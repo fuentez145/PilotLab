@@ -21,6 +21,74 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'evaluate-ai-feature-with-golden-dataset',
+		title: 'How to Evaluate an AI Feature with a Golden Dataset',
+		seoTitle: 'Evaluate an AI Feature with a Golden Dataset | PilotLab',
+		dek: 'A practical evaluation loop for AI features: choose representative cases, score the behavior that matters, catch regressions, and decide when a model is ready for production.',
+		published: '2026-09-27',
+		updated: '2026-09-27',
+		readTime: '10 min read',
+		category: 'AI engineering',
+		keyword: 'how to evaluate an AI feature with a golden dataset',
+		intro: 'A demo can show that an AI feature works once. It cannot tell you whether the feature remains useful when inputs are ambiguous, incomplete, adversarial, or simply different from the examples in the prompt. A small golden dataset gives a product team a repeatable way to compare prompts, models, retrieval changes, and application code before users discover the regression. This guide explains how to build one without pretending that a single score proves quality.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'OpenAI API — Working with evals', url: 'https://platform.openai.com/docs/guides/evals' },
+			{ label: 'Microsoft Learn — Built-in evaluators reference', url: 'https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/evaluation-metrics-built-in' },
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+		],
+		sections: [
+			{
+				heading: 'Start with a decision, not a benchmark score',
+				paragraphs: [
+					'Choose one user-visible task: classify an inbound request, extract fields from a document, draft a support reply, or route a lead. Write down what a good result means in that workflow. “Sounds intelligent” is not a criterion. A useful rubric might require the correct category, all required fields, no invented values, a safe abstention when evidence is missing, and a response that a reviewer can act on.',
+					'NIST describes the AI Risk Management Framework as a way to incorporate trustworthiness into the design, development, use, and evaluation of AI systems. Apply that idea at a small scale: name the owner of the decision, the harm from a wrong result, the data the feature may see, and the fallback when the model cannot decide. The evaluation should test those boundaries, not just fluency.',
+				],
+				bullets: ['Define the input, expected output, and permitted abstention', 'Separate quality, safety, latency, and cost criteria', 'Identify which errors require a human review or a hard block', 'Choose a versioned application and prompt configuration to evaluate'],
+			},
+			{
+				heading: 'Build a representative golden dataset',
+				paragraphs: [
+					'Collect real-shaped examples from the workflow, with personal and confidential data removed or replaced. Include ordinary cases, edge cases, incomplete inputs, near-misses between categories, long inputs, different languages or formats when supported, and examples that should be rejected. A small set chosen by the feature owner is more useful than a large random dump that contains only easy cases.',
+					'Each case needs a stable ID, input, expected outcome, and rationale or evidence. For extraction, store the expected structured fields and whether a field should be null. For a reply, use a rubric or required facts rather than one “perfect” sentence; multiple phrasings can be correct. Keep the golden answers separate from the prompt and model so changing the implementation cannot silently rewrite the target.',
+				],
+				bullets: ['Keep a test split private from prompt and implementation authors', 'Tag cases by risk, difficulty, source type, and expected behavior', 'Include known bad inputs and cases where the correct action is “cannot determine”', 'Version dataset changes and record why a case was added or removed', 'Redact secrets and minimize retained personal data'],
+			},
+			{
+				heading: 'Score the contract with multiple checks',
+				paragraphs: [
+					'Use deterministic checks wherever the product contract is deterministic. Parse structured output, validate the schema, check required fields and allowed enum values, compare identifiers against the fixture, and assert that forbidden actions were not requested. These checks are cheap, explainable, and should fail loudly. They are usually more valuable than asking another model whether a JSON object “looks good.”',
+					'Use a rubric or model-based grader for qualities that need judgment, such as relevance, groundedness, completeness, or tone. Microsoft’s evaluator reference distinguishes general quality, retrieval and groundedness, safety, and agent/tool-use evaluators; choose checks that match the feature rather than collecting every available metric. OpenAI’s eval guidance also emphasizes running more cases, prompts, and datasets as the initial sample is not enough to establish robust behavior.',
+				],
+				bullets: ['Schema validity: does the result parse and obey the type contract?', 'Task correctness: did it choose or extract the expected business result?', 'Groundedness: can each important claim be supported by supplied evidence?', 'Safety: did it refuse or escalate disallowed and ambiguous cases?', 'Operational behavior: did latency, token use, and cost stay within the budget?'],
+			},
+			{
+				heading: 'Run the eval as a comparison, not a ceremony',
+				paragraphs: [
+					'Run the same dataset against a baseline and the proposed change. The baseline might be the current production prompt, a rules-only path, or a human-labeled result. Store the configuration, dataset version, per-case output, per-check result, latency, and usage metadata. Aggregate pass rates by risk tag as well as overall; an unchanged average can hide a serious regression in high-impact cases.',
+					'Choose release gates before looking at the result. For example, require zero critical safety failures, no regression on protected cases, schema validity above the agreed threshold, and a review of any material cost or latency increase. Do not turn a threshold into a universal industry benchmark. It is a local decision based on the consequences and capacity of your workflow.',
+				],
+				bullets: ['Compare production configuration with the candidate on identical cases', 'Inspect every critical failure instead of relying on the aggregate score', 'Report results by risk and input type, not only one percentage', 'Keep a small regression set that runs on every prompt or code change', 'Use a larger evaluation run before changing models or autonomy levels'],
+			},
+			{
+				heading: 'Investigate failures and add the right case',
+				paragraphs: [
+					'An evaluation is useful when a failed case leads to a decision. First classify the failure: bad or missing source data, retrieval miss, prompt ambiguity, model limitation, parser bug, authorization error, or an incorrect expected answer. Then fix the appropriate boundary. A prompt change cannot repair a missing permission check, and a larger model cannot repair a stale system-of-record lookup.',
+					'Add a minimized version of important failures to the dataset after the root cause is understood. Keep the original failure context in a protected incident record when necessary, but do not copy sensitive customer data into a permanent test fixture by default. Review disagreement between human graders and model graders; a grader is an instrument that needs calibration, not an unquestionable judge.',
+				],
+				bullets: ['Save input, output, configuration, and evaluator reasoning with access controls', 'Label false positives and false negatives separately', 'Add one regression case for each confirmed failure mode', 'Re-run the baseline after dataset changes to detect a moving target', 'Have a domain owner review high-impact or ambiguous cases'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'A golden dataset is a controlled sample, not a substitute for production monitoring or human review. It can miss new input distributions, changing source documents, provider outages, and behavior that only appears over a long conversation. Sample live outcomes with appropriate privacy controls, track corrections and abstentions, and periodically refresh the dataset without deleting the history that explains past release decisions.',
+					'Keep high-impact side effects behind application authorization and an approval boundary even when an eval passes. Before launch, confirm that the model output is validated, failures are observable, sensitive data is handled deliberately, and rollback returns to a known configuration. The practical goal is not a perfect score; it is being able to explain what changed, what evidence supports the release, and where the system still needs a person.',
+				],
+				bullets: ['The dataset and rubric have named owners and versions', 'Critical safety and authorization failures block release', 'Per-case outputs and evaluator results are retained safely', 'A baseline comparison runs in CI or a repeatable release job', 'Latency, cost, abstention, correction, and failure rates are monitored', 'Live feedback can create reviewed regression cases', 'Human approval remains for actions whose impact exceeds the evidence', 'Rollback and model or prompt pinning are tested'],
+			},
+		],
+	},
+	{
 		slug: 'implement-circuit-breaker-nodejs-api-dependencies',
 		title: 'How to Implement a Circuit Breaker for Node.js API Dependencies',
 		seoTitle: 'Circuit Breaker for Node.js API Dependencies | PilotLab',

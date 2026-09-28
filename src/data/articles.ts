@@ -21,6 +21,79 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'set-timeout-budgets-nodejs-api-calls',
+		title: 'How to Set Timeout Budgets for Node.js API Calls',
+		seoTitle: 'Timeout Budgets for Node.js API Calls | PilotLab',
+		dek: 'Replace hanging outbound requests with a deadline-aware client that propagates cancellation, classifies timeouts, and leaves enough time for a useful response.',
+		published: '2026-09-28',
+		updated: '2026-09-28',
+		readTime: '9 min read',
+		category: 'API engineering',
+		keyword: 'how to set timeout budgets for Node.js API calls',
+		intro: 'An outbound API call without a deadline can consume a request slot until the platform gives up. A timeout value on one fetch is a start, but reliable services need a budget for the whole operation: the caller deadline must reach downstream work, retries must fit inside the remaining time, and the application must distinguish cancellation from a dependency timeout. This tutorial uses standard AbortSignal APIs to build that boundary without pretending a timeout makes an unsafe write safe to retry.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — AbortSignal.timeout()', url: 'https://nodejs.org/api/globals.html#static-method-abortsignaltimeoutdelay' },
+			{ label: 'MDN — AbortSignal.timeout()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Start with one end-to-end deadline',
+				paragraphs: [
+					'A timeout budget is the time available for the complete user operation, not permission for every dependency to run that long. If an incoming request has 1,000 ms left, an outbound call cannot safely receive a fresh 1,000 ms timeout: the API still needs time to parse the response, apply business rules, write a result, and send a response. Pass a deadline or remaining budget through the call chain rather than letting each layer invent its own clock.',
+					'Choose budgets from the product contract and measured latency. A fast lookup, a payment authorization, and a report-generation request have different acceptable behavior. Set an upper bound at the edge, reserve a small response margin, and document what the caller receives when the budget expires. HTTP defines status semantics such as 408 Request Timeout and 504 Gateway Timeout, but it does not choose the right application deadline for your service.',
+				],
+				bullets: ['Define the caller deadline and the operation it covers', 'Pass remaining milliseconds to every outbound boundary', 'Reserve time for validation, persistence, and the response', 'Choose a degraded result, queue handoff, or explicit error before coding', 'Record the budget class without exposing customer or token data'],
+			},
+			{
+				heading: 'Use AbortSignal for the local timeout',
+				paragraphs: [
+					'Node.js provides AbortSignal.timeout(delay), which creates a signal that aborts after the supplied delay. Pass that signal to fetch or another client that supports AbortSignal. The signal is a cancellation boundary: it does not guarantee that a remote server stopped processing, so do not treat a timed-out write as proof that the write did not happen.',
+					'A small provider-neutral helper keeps the policy at the client boundary. The following shape uses the remaining budget and preserves the original caller signal when one exists:',
+				],
+				bullets: [
+					'const timeout = AbortSignal.timeout(Math.max(1, remainingMs));',
+					'const signal = callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;',
+					'const response = await fetch(url, { signal, headers });',
+					'Keep the helper responsible for cancellation only; authentication, response validation, and retry policy remain explicit',
+				],
+			},
+			{
+				heading: 'Classify the reason before deciding what to do',
+				paragraphs: [
+					'An aborted operation can mean different things. The caller may have disconnected, the local deadline may have expired, or an operator may have cancelled the work. MDN documents TimeoutError for AbortSignal.timeout() and AbortError for other abort paths. Preserve that distinction in your error type and logs so a normal client cancellation does not page the team as a dependency outage.',
+					'Fetch also resolves normally for HTTP error responses. Check response.ok or the status policy yourself, and include a bounded response identifier in the error rather than logging an entire body. A 401, 404, or validation response is not automatically retryable; a timeout, connection failure, or selected 5xx may be, depending on the operation and remaining budget.',
+				],
+				bullets: ['Caller cancellation: stop work and avoid noisy outage alerts', 'Local timeout: record dependency, operation, elapsed budget, and attempt', 'Transport failure: classify by dependency and retry policy', 'HTTP response: validate status and body before mapping it to a domain error', 'Unknown error: fail closed and retain a correlation ID for investigation'],
+			},
+			{
+				heading: 'Fit retries inside the remaining budget',
+				paragraphs: [
+					'Retries are another consumer of the same deadline. Before each attempt, calculate the remaining time and stop if it cannot cover the attempt timeout plus the response margin. Use bounded exponential backoff with jitter only when the operation is safe to repeat and the failure is plausibly transient. A retry after a timeout can duplicate a remote side effect when the server completed the request but the response was lost.',
+					'For reads, a short retry may be reasonable when the dependency contract permits it. For writes, prefer an idempotency key, a provider-supported idempotency mechanism, or a durable workflow that can reconcile the outcome. Never let a generic retry wrapper retry a locally expired signal: the caller deadline is the higher-level contract and must win.',
+				],
+				bullets: ['Compute remaining time before every attempt and backoff', 'Cap attempts and total elapsed time', 'Add jitter so many callers do not retry together', 'Retry only errors classified as transient and safe', 'Use a stable idempotency key for repeatable external writes', 'Emit one logical-operation result instead of hiding attempt count'],
+			},
+			{
+				heading: 'Verify the boundary with a controllable dependency',
+				paragraphs: [
+					'Test timeouts against a local server you control. Add endpoints that delay headers, delay the body, return a 503, return a 400, and close the connection. Assert that a delayed call rejects within the local budget, that the caller signal cancels it earlier, and that the client does not retry permanent responses. Use a fake clock or a short test budget so the suite does not become a slow sleep test.',
+					'Then test the dangerous ambiguity: let the test server record a write and delay its response beyond the client deadline. The client should report an unknown outcome and your application should reconcile or surface that state rather than blindly sending the same write again. Verify that logs contain the operation and dependency labels but not authorization headers, request bodies, or full response payloads.',
+				],
+				bullets: ['Delayed headers exceed the attempt budget and cancel the request', 'Delayed body consumption is also bounded', 'Caller cancellation wins over the longer dependency timeout', '4xx responses do not enter the transient retry path', 'Selected 5xx and transport failures obey the retry budget', 'A timed-out write is reconciled or marked unknown, never assumed absent', 'Tests prove the remote dependency received no extra retry after the deadline'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Timeouts protect local capacity; they do not fix a slow dependency, guarantee remote cancellation, or replace a circuit breaker. Combine them with connection-pool limits, dependency metrics, a circuit breaker for sustained failure, and a queue for work that cannot fit a request deadline. Keep the timeout policy configurable by operation class, but make changes auditable so a convenient increase does not quietly turn into resource exhaustion.',
+					'Watch timeout rate, cancellation reason, attempt count, dependency status, remaining budget, and user-visible fallback separately. Sample traces and logs with privacy controls. When the deadline is exceeded, the most useful incident question is not only “which service was slow?” but also “which layer spent the budget, and did the caller have a safe next step?”',
+				],
+				bullets: ['Every inbound request has a bounded deadline or explicit long-running contract', 'Outbound clients accept caller cancellation and a local attempt budget', 'Response status and body are validated independently of transport success', 'Retries are safe, bounded, jittered, and stopped by the parent deadline', 'Write operations have idempotency or reconciliation semantics', 'Timeouts, cancellations, and dependency failures are distinct in telemetry', 'A circuit breaker or queue protects the next failure boundary', 'Runbooks explain fallback, unknown write outcome, and configuration rollback'],
+			},
+		],
+	},
+	{
 		slug: 'evaluate-ai-feature-with-golden-dataset',
 		title: 'How to Evaluate an AI Feature with a Golden Dataset',
 		seoTitle: 'Evaluate an AI Feature with a Golden Dataset | PilotLab',

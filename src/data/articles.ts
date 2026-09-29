@@ -4029,4 +4029,80 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'design-safe-ai-tool-calling-boundary',
+		title: 'How to Design a Safe AI Tool-Calling Boundary',
+		seoTitle: 'Safe AI Tool-Calling Boundaries | PilotLab',
+		dek: 'A practical architecture for letting an AI feature request actions without giving the model direct authority over your systems, data, or irreversible side effects.',
+		published: '2026-09-29',
+		updated: '2026-09-29',
+		readTime: '10 min read',
+		category: 'AI engineering',
+		keyword: 'how to design a safe AI tool-calling boundary',
+		intro: 'Tool calling turns a model response into a request for application code to do something: look up an order, create a ticket, send a message, or update a record. That is useful, but the model must not become the permission boundary. A safe design treats the tool call as untrusted input, checks authority in code, limits the available capabilities, and puts approval in front of actions whose mistakes are expensive. This guide shows a provider-neutral boundary that small product teams can implement and test.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'OpenAI API — Function calling', url: 'https://platform.openai.com/docs/guides/function-calling' },
+			{ label: 'OWASP Gen AI Security Project — LLM01:2025 Prompt Injection', url: 'https://genai.owasp.org/llmrisk/llm01-prompt-injection/' },
+			{ label: 'OWASP Gen AI Security Project — LLM06:2025 Excessive Agency', url: 'https://genai.owasp.org/llmrisk/llm062025-excessive-agency/' },
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+		],
+		sections: [
+			{
+				heading: 'Define the boundary before defining the tools',
+				paragraphs: [
+					'The model should be able to request a capability, not receive a database connection, an unrestricted API token, or a general-purpose shell. Start with one workflow and list the smallest operations it needs. A support assistant might need get_order and draft_reply; it probably does not need arbitrary SQL, send_email_to_anyone, and delete_customer.',
+					'OpenAI describes function calling as a way for models to interface with external systems and application-provided actions. The application still owns execution. OWASP calls excessive agency a risk when an LLM has too much functionality, permission, or autonomy. Make that separation visible in the architecture and in the code review checklist.',
+				],
+				bullets: ['Name the user goal and the minimum tool set', 'Keep read tools separate from write tools', 'Give every tool an owner, data scope, timeout, and audit event', 'Define which actions require confirmation or a human reviewer', 'Treat the model, retrieved documents, and tool arguments as untrusted'],
+			},
+			{
+				heading: 'Use a typed request, then validate it like any API input',
+				paragraphs: [
+					'A tool call is not authorization and a tool description is not validation. Parse the model output into a strict schema, reject unknown fields, validate identifiers and enum values, and enforce size and time limits. Do not interpolate arguments into SQL or shell commands. Resolve a customer or tenant from the authenticated application context, not from an account_id the model invented.',
+					'A provider-neutral TypeScript shape can stay small:',
+				],
+				bullets: [
+					"type ToolRequest = { name: 'get_order' | 'draft_reply'; arguments: unknown; callId: string };",
+					'const tool = registry.get(request.name); if (!tool) throw new Error(\'Unknown tool\');',
+					'const args = tool.input.parse(request.arguments); // schema validation, not a type assertion',
+					'await authorize(actor, tool.policy, args); // tenant, resource, and action checks',
+					'const result = await tool.execute({ actor, args, signal }); // bounded and observable',
+					'Return a compact, redacted result to the model; keep secrets and internal traces out of it',
+				],
+			},
+			{
+				heading: 'Make authorization independent of the model',
+				paragraphs: [
+					'Authentication tells you who started the interaction. Authorization must still check whether that actor may perform this specific operation on this specific resource. Perform the check immediately before execution, using the same policy path as a non-AI request. A prompt instruction such as “only access the current customer” is useful guidance but cannot enforce a tenant boundary.',
+					'Keep credentials in the application or a narrowly scoped service. The model should receive a tool name and a safe result, never a bearer token or a hidden admin capability. If a tool calls another provider, use a credential whose scope matches that one operation and record the provider request without logging the secret or full customer payload.',
+				],
+				bullets: ['Derive actor and tenant from the authenticated request context', 'Check resource ownership and action permission in code', 'Use least-privilege credentials per integration or operation', 'Do not trust model-provided roles, tenant IDs, or approval claims', 'Fail closed when identity, policy, or scope is unavailable'],
+			},
+			{
+				heading: 'Add approval and idempotency to side effects',
+				paragraphs: [
+					'Reading an order and sending a refund do not belong in the same risk class. For a write, show the proposed action, normalized arguments, affected resource, and expected consequence to the user or reviewer. Persist the approval against a specific action hash and short-lived request ID; do not let a later model turn reuse an old approval for different arguments.',
+					'Use an idempotency key for external writes and make the result explicit: succeeded, rejected, awaiting approval, or unknown after a timeout. A model can repeat a call, a client can retry a request, and a network failure can occur after the provider commits. The side-effect boundary must converge safely instead of assuming exactly-once model behavior.',
+				],
+				bullets: ['Classify tools as read, reversible write, irreversible write, or privileged', 'Require confirmation for money movement, deletion, external messaging, and permission changes', 'Bind approval to actor, tool, arguments, resource, and expiry', 'Use stable idempotency keys for repeatable external operations', 'Expose an unknown outcome and reconciliation path after ambiguous failures'],
+			},
+			{
+				heading: 'Defend against prompt injection and confused-deputy behavior',
+				paragraphs: [
+					'Instructions can arrive through user text, documents, web pages, emails, or tool results. OWASP distinguishes direct and indirect prompt injection and notes that successful attacks can influence critical decisions or connected functions. Mark external content as data, not authority, and never let a retrieved sentence grant permission or change the tool registry.',
+					'Defense is layered rather than magical. Limit tools and data, validate outputs, filter where the workflow needs it, require approval for high-impact actions, and test adversarial inputs. If a tool result contains “ignore previous instructions,” the application should still apply the same authorization and approval checks because the model is not the final trust boundary.',
+				],
+				bullets: ['Separate system policy, user request, and untrusted retrieved content', 'Do not pass raw external instructions into privileged tool policy', 'Prevent data returned by one tenant from entering another tenant’s context', 'Use allowlists for tools, domains, fields, and side-effect types', 'Log blocked calls and review them as security signals, without storing unnecessary sensitive content'],
+			},
+			{
+				heading: 'Test the executor, not only the prompt',
+				paragraphs: [
+					'Unit-test the registry and policy with model output treated as arbitrary JSON. Try unknown tools, extra fields, malformed IDs, another tenant’s resource, expired approvals, oversized arguments, repeated call IDs, and a tool result containing an injection. None should bypass the application boundary. Then run end-to-end cases with a real or stubbed model to verify that useful requests still complete.',
+					'Observe each logical interaction with a correlation ID, actor and tenant scope, selected tool, validation result, authorization decision, approval state, duration, outcome, and bounded error class. Redact prompts, arguments, and results according to your data policy. NIST describes the AI RMF as a way to incorporate trustworthiness into AI design and evaluation; use that framing to assign an owner for each tool and a review date for its permissions.',
+				],
+				bullets: ['Unauthorized reads and writes are rejected before execution', 'A duplicate call cannot duplicate a protected side effect', 'A timeout yields a safe retry or reconciliation state', 'Approval cannot be replayed with changed arguments or a different actor', 'Indirect-injection fixtures cannot grant tools or permissions', 'Metrics distinguish validation, authorization, provider, timeout, and human-rejection failures', 'The production checklist documents tool scope, credentials, retention, rollback, and owner'],
+			},
+		],
+	},
 ];

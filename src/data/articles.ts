@@ -4105,4 +4105,81 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'add-offline-fallback-service-worker-web-app',
+		title: 'How to Add an Offline Fallback with a Service Worker',
+		seoTitle: 'Add an Offline Fallback with a Service Worker | PilotLab',
+		dek: 'A practical service-worker pattern for resilient web apps: cache a deliberate fallback, version it safely, preserve fresh data rules, and test recovery when the network disappears.',
+		published: '2026-09-30',
+		updated: '2026-09-30',
+		readTime: '10 min read',
+		category: 'Web performance',
+		keyword: 'how to add an offline fallback with a service worker',
+		intro: 'An offline fallback is not the same as making an application fully offline-first. It is a narrower promise: when navigation cannot reach the network, the browser can still show a useful, clearly labeled page instead of a browser error. Service workers provide the interception point, but the product still has to decide what is safe to cache, how versions are replaced, and how stale information is presented. This tutorial builds that boundary without pretending cached HTML is current application data.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — Using Service Workers', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers' },
+			{ label: 'MDN — Cache API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Cache' },
+			{ label: 'web.dev — Service worker caching and HTTP caching', url: 'https://web.dev/articles/service-worker-caching-and-http-caching' },
+			{ label: 'MDN — ServiceWorkerContainer.register()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerContainer/register' },
+		],
+		sections: [
+			{
+				heading: 'Define the offline promise first',
+				paragraphs: [
+					'An offline fallback is useful for a marketing site, documentation, a reader, or a dashboard that can explain the connection state. It is risky for screens that display account-specific or rapidly changing data. Decide whether the fallback is a static page, a cached shell, a last-known snapshot, or an explicit “you are offline” explanation. Label stale content; do not make a cached response look like a confirmed current result.',
+					'Service workers require a secure context such as HTTPS; localhost is suitable for development. Their scope depends on the registration URL and scope rules, so register the worker from a location that covers the pages it should control. Keep the first release narrow: navigation fallback is easier to reason about than intercepting every API request.',
+				],
+				bullets: ['Name the routes that need a useful offline experience', 'Separate static assets from authenticated or mutable API data', 'Define what stale means and how the UI communicates it', 'Choose an offline fallback that contains no secrets or private records', 'Keep a normal network path when the service worker is absent or fails'],
+			},
+			{
+				heading: 'Register the worker and understand its lifecycle',
+				paragraphs: [
+					'Register the worker from the page after the application is usable. The browser fetches the worker script, runs install, then activates it; an activated worker controls new pages within its scope. Existing pages may need a reload before they are controlled unless the worker deliberately calls clients.claim(). Avoid forcing an immediate takeover until you have tested how mixed old and new page versions behave.',
+					'Updating a service worker is a deployment protocol. Use a changed script or versioned cache name to trigger an update, populate the new cache during install, and remove old caches during activate only after the new cache is ready. If installation fails, the previous worker should remain available rather than leaving the application with a half-populated cache.',
+				],
+				bullets: ['Serve the worker over HTTPS and register the intended scope explicitly', 'Keep install work bounded and fail the install when required assets are missing', 'Version cache names with the worker or asset release', 'Delete only old caches owned by this application', 'Document whether existing tabs wait for reload or are claimed immediately'],
+			},
+			{
+				heading: 'Cache only the assets you can update safely',
+				paragraphs: [
+					'The Cache API stores Request and Response pairs, but it does not automatically expire entries or honor HTTP cache headers. Your worker owns cache naming, matching, updating, and deletion. Cache immutable, fingerprinted assets and a small fallback page deliberately. Avoid pre-caching a large application bundle or every route just because storage is available; browser quota is finite and the browser may remove an origin’s storage.',
+					'Use the HTTP cache and the service-worker cache for different decisions. HTTP headers still control ordinary browser caching, while the service worker can choose whether to answer from its own cache or the network. For a fallback-only design, let normal navigations use the network first and return the cached offline page only when the fetch fails. This preserves freshness when the connection works.',
+				],
+				bullets: ['Use a named cache for versioned static assets and the fallback', 'Cache successful, same-origin responses that match an explicit allowlist', 'Do not cache authenticated HTML or API data without a privacy and invalidation design', 'Purge old entries and monitor storage usage', 'Treat cache.put() and fetch failures as part of the deployment path'],
+			},
+			{
+				heading: 'Implement a network-first navigation fallback',
+				paragraphs: [
+					'Handle fetch events for navigations rather than applying one strategy to every request. Try the network first so a connected user receives the current page. If the request fails because the network is unavailable, return the cached fallback. Keep the fallback response simple and static; it should explain that the page is offline and offer a retry when the user reconnects.',
+					'A provider-neutral worker shape is: open the versioned cache during install, cache `/offline.html`, then in fetch inspect `event.request.mode === "navigate"`. Call fetch for the navigation and catch network failures by returning `caches.match("/offline.html")`. Do not convert every HTTP 404 or 500 into an offline page automatically: fetch resolves to a Response for HTTP errors, so decide separately whether an error response is a valid application result.',
+				],
+				bullets: ['Intercept only navigation requests for the first version', 'Use event.respondWith() so the browser receives the chosen response', 'Return the cached fallback only for a genuine network failure', 'Keep the fallback same-origin and available in the versioned cache', 'Add a visible retry or reconnect path instead of trapping the user'],
+			},
+			{
+				heading: 'Protect privacy, freshness, and recovery',
+				paragraphs: [
+					'Never assume that “cached” means private. A shared browser profile, a stolen device, or a later user on the same origin may see whatever your worker returns. Keep account-specific data out of a generic offline fallback, clear sensitive caches on logout when the application uses them, and do not let a URL parameter select another user’s cached record. The service worker is not an authorization layer; the server still owns access control.',
+					'When a new release changes the HTML and asset contract, old pages and a new worker can coexist briefly. Use hashed assets or a compatible rollout, retain an old cache until the new worker is active, and verify that the fallback does not reference an asset that was removed during activation. If the worker itself breaks, the site needs a documented removal or rollback path: unregistering it and clearing caches is an operational recovery step, not a substitute for testing.',
+				],
+				bullets: ['Keep private responses out of shared fallback caches', 'Make cache entries compatible with the page version that reads them', 'Test logout, account switching, and browser storage eviction', 'Provide a rollback path for a broken worker release', 'Do not claim that offline UI proves a write succeeded'],
+			},
+			{
+				heading: 'Verify offline behavior on real devices',
+				paragraphs: [
+					'Test the lifecycle, not just a cached page. Load the site once online, inspect the service-worker scope and cache, enable offline mode, navigate to a supported route, and confirm the fallback appears with no private data. Then deploy a new worker, keep an old tab open, reload, and verify that both versions complete their requests without missing assets. Test a first visit with an empty cache: it should show the normal network failure or an intentionally designed minimal response, not a false offline success.',
+					'Exercise a slow network, a network that drops after HTML starts, a failed asset, an HTTP 500, storage quota pressure, logout, and a service-worker registration failure. Check the public HTTPS deployment through its real CDN or proxy. Record navigation success, fallback usage, worker install failures, activation age, cache size, and JavaScript errors, but never log page contents or credentials.',
+				],
+				bullets: ['Online navigation returns the current network response', 'A network failure returns the intended fallback with correct headers', 'HTTP error responses follow the application policy rather than being mislabeled offline', 'A first visit with no cache has a useful and honest failure path', 'New and old worker versions do not reference incompatible assets', 'Logout and account switching do not expose prior user data', 'Storage eviction and registration failure degrade to the normal web experience', 'The team can unregister, roll back, and clear a faulty worker safely'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'An offline fallback improves resilience at the navigation boundary; it does not make a web application offline-capable by itself. Forms, mutations, search, authenticated APIs, and conflict resolution need separate contracts. Add them only when the product can define queuing, retry, reconciliation, and user-visible failure states. A stale page that looks authoritative is worse than a clear offline message.',
+					'Keep the worker small, observable, and removable. The best first release often caches one static fallback and immutable assets, uses network-first navigation, and leaves API caching untouched. Expand from there only after measuring real offline use and testing the privacy, update, storage, and rollback consequences.',
+				],
+				bullets: ['The offline promise is documented per route and data type', 'Cache names, ownership, expiry, and deletion rules are explicit', 'Network and service-worker caching policies do not contradict each other', 'Authenticated and mutable data has a separate privacy and freshness design', 'Worker updates are tested with old tabs and interrupted installs', 'Offline, storage, proxy, and registration failures are observable', 'A broken worker can be rolled back or removed without a privileged emergency change', 'The UI distinguishes cached content, current content, and unsent work'],
+			},
+		],
+	},
 ];

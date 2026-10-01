@@ -4182,4 +4182,81 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'prevent-cache-stampede-nodejs-api',
+		title: 'How to Prevent a Cache Stampede in a Node.js API',
+		seoTitle: 'Prevent Cache Stampedes in a Node.js API | PilotLab',
+		dek: 'Keep a hot API dependency from receiving a burst of identical refreshes: coalesce concurrent misses, serve stale data deliberately, and verify recovery under load.',
+		published: '2026-10-01',
+		updated: '2026-10-01',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to prevent a cache stampede in a Node.js API',
+		intro: 'A cache can make a read-heavy API fast until an entry expires and many requests miss at nearly the same time. If every request starts its own database query or upstream fetch, the cache has turned one normal refresh into a burst against the dependency it was meant to protect. This tutorial builds a narrow defense for Node.js: coalesce concurrent work per key, use stale data only under an explicit freshness policy, and test the failure windows that are easy to miss in a single-request benchmark.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — HTTP caching', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching' },
+			{ label: 'MDN — Cache-Control header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control' },
+			{ label: 'RFC 5861 — stale-while-revalidate and stale-if-error', url: 'https://www.rfc-editor.org/rfc/rfc5861' },
+			{ label: 'Node.js Documentation — Timers', url: 'https://nodejs.org/api/timers.html' },
+		],
+		sections: [
+			{
+				heading: 'Recognize the stampede before changing the TTL',
+				paragraphs: [
+					'A stampede occurs when multiple callers discover that the same cached value is absent or stale and all begin the refresh independently. The trigger may be a normal expiry, an eviction, a deploy that clears in-memory state, or an upstream outage that prevents refresh. The symptoms are often a sudden rise in identical database queries, connection-pool wait, upstream 5xx responses, and latency for requests that do not share the affected key.',
+					'First identify the protected resource and its cost. A product catalog, feature configuration, or public exchange-rate snapshot may tolerate a short stale window; account balances and authorization decisions generally need a different consistency contract. Measure cache hits, misses, refreshes, refresh failures, concurrent waiters, key cardinality, and age served. Do not solve a stampede by adding an arbitrary long TTL to data that must be current.',
+				],
+				bullets: ['Choose one read path and one cache key to instrument first', 'Separate fresh hits, stale hits, misses, and refresh failures', 'Measure the upstream work caused by one logical key', 'Write down the maximum acceptable age and an unsafe-to-cache classification', 'Confirm whether the cache is local, shared, or at a CDN'],
+			},
+			{
+				heading: 'Coalesce one refresh per process',
+				paragraphs: [
+					'The simplest protection is request coalescing, also called single-flight work. Keep a map from cache key to the Promise for the refresh currently in progress. The first miss starts the loader; later callers find the existing Promise and await it instead of starting another loader. Remove the map entry in a finally block so a rejected refresh does not poison every future request.',
+					'A provider-neutral Node.js shape is: `const inFlight = new Map<string, Promise<Value>>();`. In `getValue(key)`, check the data cache first. If it is absent, return the existing in-flight Promise when present; otherwise create the loader Promise, store it immediately, and attach cleanup before awaiting it. Store the Promise, not only a boolean: all waiters need the same result and the same failure. The loader still needs its own timeout and bounded error handling.',
+				],
+				bullets: ['Construct the key from authenticated scope and normalized parameters', 'Insert the Promise before the asynchronous loader can complete', 'Delete the entry in `finally`, including timeout and rejection paths', 'Never let a caller cancel the shared Promise for every other waiter', 'Bound the number and duration of waiters so a slow dependency cannot grow memory without limit'],
+			},
+			{
+				heading: 'Add freshness states instead of one binary cache flag',
+				paragraphs: [
+					'Treat a cache entry as fresh, stale-but-servable, or unusable. A fresh entry returns immediately. A stale-but-servable entry can be returned to the caller while one background refresh updates it. An unusable entry blocks behind the single-flight refresh, or fails with the documented fallback when no safe value exists. This makes the product decision visible instead of hiding it in a timeout.',
+					'HTTP provides related controls at shared-cache boundaries. MDN documents `stale-while-revalidate` as a directive that permits a cache to serve stale content while it revalidates; RFC 5861 describes the same latency-hiding goal and separately defines `stale-if-error`. Those directives do not automatically coordinate a Node.js process-local map, and their support and scope depend on the cache in front of the service. Treat application-level stale serving and HTTP cache headers as two policies that must agree.',
+				],
+				bullets: ['Fresh: serve without starting work', 'Stale-but-servable: serve once and trigger one refresh', 'Unusable: wait for a bounded refresh or use a deliberate fallback', 'Never serve stale authorization, payment, or safety decisions by default', 'Include the entry age or freshness state in internal metrics, not necessarily in public responses'],
+			},
+			{
+				heading: 'Make refreshes safe when they fail',
+				paragraphs: [
+					'A refresh can fail after the old value has expired, or it can return malformed data that should never enter the cache. Validate the loaded value before replacing the previous entry. Keep the previous value separately when the business rule permits stale-if-error behavior, and cap the stale window; otherwise return a clear degraded response rather than claiming that an old result is current.',
+					'Use a timeout around the loader and classify errors. A transient upstream failure may schedule a later refresh with jitter; invalid data, an authorization error, or a changed schema should usually fail closed and alert the owner. Do not let every waiting request independently retry after the shared Promise rejects. The next request may start a new attempt, but backoff and a circuit breaker may be needed when the dependency is persistently unhealthy.',
+				],
+				bullets: ['Validate and size-limit the refresh result before caching it', 'Preserve stale data only within a documented maximum age', 'Record refresh failure without replacing a valid prior value', 'Apply timeout, backoff, jitter, and circuit-breaker policy to the loader', 'Prevent a rejected shared Promise from becoming an unbounded retry loop'],
+			},
+			{
+				heading: 'Decide whether one process is enough',
+				paragraphs: [
+					'A process-local in-flight map coalesces requests that land on the same Node.js instance. In a multi-instance deployment, five replicas can still perform five refreshes for one key. That may be acceptable when the upstream tolerates the load, or when a shared cache absorbs most misses. If it is not acceptable, move coordination to a cache or job system that supports an atomic lease with an expiry, or place the refresh behind a dedicated worker. Do not use a database row as a lock without designing ownership, expiry, and recovery for crashed holders.',
+					'Distributed coordination adds its own failure modes: clock skew, expired leases, abandoned locks, duplicate work after a timeout, and contention on the lock store. The result must remain correct if two refreshes happen. Prefer idempotent reads and versioned writes, and use fencing or compare-and-set semantics when a stale worker could overwrite a newer value. Measure lock wait and refresh duplication before paying for a fleet-wide lock.',
+				],
+				bullets: ['Document whether coalescing is per process, per region, or fleet-wide', 'Give every distributed lease an owner, expiry, and recovery path', 'Assume a crashed or partitioned worker can leave incomplete coordination state', 'Make duplicate refreshes harmless through version checks or idempotent writes', 'Do not expose tenant-specific data through a shared key or cache entry'],
+			},
+			{
+				heading: 'Verify expiry, concurrency, and recovery together',
+				paragraphs: [
+					'Use a controllable loader and a fake or injectable clock. Start with a fresh hit and assert that the loader is not called. Expire one key, release many concurrent callers, and assert that the loader runs once while every waiter receives the validated value. Then make the loader reject, confirm that all waiters receive a bounded error or safe stale result, and verify that a later request can retry after cleanup.',
+					'Test the production boundary, not only the helper. Run two application instances against the real shared cache if fleet-wide behavior matters. Exercise a deploy that clears local memory, a slow loader, a loader that returns invalid data, a stale value beyond its maximum age, key-scope changes, and an upstream recovery. Watch for an accidental background refresh per request: a stale path should schedule one refresh and make the ownership observable.',
+				],
+				bullets: ['Concurrent misses for one key produce one loader call per intended coordination scope', 'Different keys do not block one another', 'A slow loader times out and cleans up its in-flight state', 'A rejected loader does not remain cached as a successful value', 'Stale serving stops at the documented maximum age', 'Refresh success atomically replaces the old value and metadata', 'A replica restart does not create unsafe data or permanent locks', 'Metrics expose hit, miss, stale, refresh, wait, error, and duplicate-refresh counts'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Request coalescing reduces duplicate work; it does not make a cache correct by itself. You still need a key design, authorization boundary, invalidation or version strategy, size and memory limits, timeouts, and a decision about what stale data means to users. A cache outage should have a deliberate fail-open or fail-closed path for each resource class, not one global behavior.',
+					'Roll out on one read-heavy resource and compare the baseline with the treatment. Keep the refresh function small, observable, and independently testable. At PilotLab, the useful boundary is the contract between freshness, fallback, and upstream capacity: when those rules are explicit, a cache can absorb bursts without quietly serving data that the product cannot defend.',
+				],
+				bullets: ['The resource owner has approved its freshness and stale-data policy', 'Cache keys include the correct tenant, locale, authorization, and representation scope', 'The refresh has timeout, validation, and bounded retry behavior', 'In-flight state is cleaned on success, rejection, timeout, and shutdown', 'Local versus distributed coalescing is explicit and tested', 'Cache and upstream metrics distinguish logical requests from physical refreshes', 'Sensitive data is not placed in a shared cache accidentally', 'A switch can disable stale serving or coalescing without corrupting source data'],
+			},
+		],
+	},
 ];

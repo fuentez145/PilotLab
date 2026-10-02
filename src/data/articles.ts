@@ -4259,4 +4259,77 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'coordinate-scheduled-jobs-postgres-advisory-locks',
+		title: 'How to Coordinate Scheduled Jobs with PostgreSQL Advisory Locks',
+		seoTitle: 'Coordinate Scheduled Jobs with PostgreSQL Advisory Locks | PilotLab',
+		dek: 'Prevent duplicate scheduled work across API replicas with a database-backed lock, bounded execution, and a recovery path for crashed workers.',
+		published: '2026-10-02',
+		updated: '2026-10-02',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to coordinate scheduled jobs with PostgreSQL advisory locks',
+		intro: 'A scheduled task becomes unreliable when every API replica believes it should run the same job. Two workers may send duplicate reports, rebuild the same index, or compete over a cleanup task. PostgreSQL advisory locks provide a useful coordination primitive for teams already using Postgres: one worker attempts a named lock, the others skip that run, and the database releases a session-level lock if the connection disappears. This tutorial explains the boundary, the SQL, and the failure tests—but also when a lock is the wrong tool.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'PostgreSQL Documentation — Explicit Locking', url: 'https://www.postgresql.org/docs/current/explicit-locking.html' },
+			{ label: 'PostgreSQL Documentation — Advisory lock functions', url: 'https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS' },
+			{ label: 'Kubernetes Documentation — CronJob concurrency policy', url: 'https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/' },
+		],
+		sections: [
+			{
+				heading: 'Decide whether a lock is enough',
+				paragraphs: [
+					'Use an advisory lock when the job is triggered on a schedule, must have at most one active runner for a scope, and can safely be skipped when another runner already owns the slot. Typical examples are refreshing a shared materialized view, sending one periodic digest, or pruning records. You need a Postgres connection pool, a repeatable job entry point, and a clear operation key such as billing-digest:2026-10-02.',
+					'An advisory lock is coordination, not a durable queue. It does not remember missed work, report progress, or retry a failed item. If every scheduled occurrence must be processed, use a durable job table or queue and make each job idempotent. Kubernetes also warns that a CronJob can create concurrent Jobs in some circumstances; cluster-level concurrencyPolicy and application-level coordination solve related but different problems.',
+				],
+				bullets: ['Define whether skipped runs may be lost or must be recovered', 'Choose the lock scope: global, tenant, resource, or schedule occurrence', 'Give the job its own timeout, retry, and operator-visible outcome', 'Keep destructive or financial work behind a durable, idempotent workflow', 'Use a stable lock key and document its owner'],
+			},
+			{
+				heading: 'Acquire a non-blocking lock on the right connection',
+				paragraphs: [
+					'PostgreSQL provides pg_try_advisory_lock for an exclusive session-level lock. It returns true immediately when the lock is acquired and false when another session holds it. That non-blocking behavior is a good default for a scheduled job: a second worker can record “skipped: already running” instead of waiting and consuming a pool connection.',
+					'Session-level is the important detail. The lock belongs to the database session, so acquire it and release it on the same checked-out client—not through two independent pool queries. Release it in a finally block with pg_advisory_unlock, and release or invalidate the client if the query fails. PostgreSQL also releases session-level advisory locks when the session ends, which protects against a worker crash, but it does not make an abandoned external side effect safe.',
+				],
+				bullets: [
+					'const client = await pool.connect();',
+					'const { rows } = await client.query(\'select pg_try_advisory_lock($1) as acquired\', [lockKey]);',
+					'if (!rows[0].acquired) { client.release(); return { status: \'skipped\' }; }',
+					'Use one checked-out client for acquire, work, and unlock; never assume a pool preserves session affinity',
+				],
+			},
+			{
+				heading: 'Make the lock key stable and collision-resistant',
+				paragraphs: [
+					'Advisory locks accept either one bigint or two integer keys. Convert a documented operation name into a stable key at the application boundary, or use the two-integer form when you need a clear namespace and resource identifier. Do not silently truncate arbitrary strings into a small integer space: unrelated jobs could block one another, and a collision is difficult to diagnose.',
+					'Include the scope that must be exclusive. A global nightly index rebuild should have one key; a per-tenant refresh can use a namespace plus tenant identifier so tenants do not block each other. Log the human-readable operation and scope alongside the numeric key, but do not place customer secrets or unbounded identifiers in metric labels.',
+				],
+				bullets: ['Reserve a namespace for each job family', 'Use the same key calculation in every scheduler and deployment', 'Hash long names only with a documented, collision-reviewed scheme', 'Choose global versus per-tenant locking from the actual isolation requirement', 'Expose acquisition, skip, duration, and failure metrics'],
+			},
+			{
+				heading: 'Bound the work and preserve recovery',
+				paragraphs: [
+					'Once a worker acquires the lock, set a job deadline. A lock prevents a second runner from entering, but it does not stop a query, HTTP call, or loop that never returns. Use request and database statement timeouts, stop claiming new items when the deadline is near, and keep external side effects idempotent. If the process is killed, Postgres will release the session lock; a later run may then repeat work that completed just before the crash.',
+					'For work that cannot be safely repeated, persist progress and an idempotency key outside the lock. A transaction-level advisory lock can be useful for a short database transaction, but it ends when the transaction commits or rolls back. Do not hold a database session lock while waiting on a slow third-party API unless you have measured the pool and outage impact; a durable job state is usually safer for long work.',
+				],
+				bullets: ['Set a maximum runtime shorter than the scheduler’s overlap window', 'Use database and outbound-call deadlines inside the job', 'Record started, completed, skipped, failed, and timed-out outcomes', 'Make each external effect idempotent or reconcile unknown outcomes', 'Use transaction-level locks only for work that fits one transaction'],
+			},
+			{
+				heading: 'Test duplicate starts, crashes, and lock visibility',
+				paragraphs: [
+					'Run two workers against the same database and trigger the same job at the same time. Assert that exactly one acquires the lock, the other exits quickly, and the lock owner releases it after normal completion. Query pg_locks during a controlled run when you need to inspect lock state; PostgreSQL documents that view for examining outstanding locks.',
+					'Then test the uncomfortable paths. Kill the owner after an external side effect but before the success record, hold the database connection open until the job deadline, make the unlock query fail, and restart the worker. Verify that a later run can acquire the lock, that duplicate side effects are prevented or reconciled, and that pool connections are not leaked. A passing “two calls” unit test is not proof of safe recovery.',
+				],
+				bullets: ['Concurrent starts produce one owner and one fast skip', 'The loser does not wait indefinitely or exhaust the connection pool', 'Normal completion unlocks the same session that acquired the lock', 'A crashed session eventually permits a later acquisition', 'A failed external write does not leave a false completed state', 'A repeated run is safe when the process dies after the side effect', 'Metrics distinguish skipped, failed, timed-out, and successful runs'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Advisory locks are a small and useful primitive when the database is already the coordination boundary. They are not a scheduler, a lease with an application-visible expiry, or a substitute for a queue. Network partitions and process pauses can make the lock holder appear stuck while the job’s external work has an unknown outcome. Keep the lock scope narrow, the work bounded, and the recovery behavior explicit.',
+					'Before rollout, document the key, owner, schedule, skip semantics, timeout, retry policy, and manual recovery command. Alert on missed expected runs, unusually long ownership, repeated lock contention, and failed unlock or connection cleanup. If the job becomes large, per-item, customer-visible, or financially consequential, move the work into a durable operation model rather than adding more cleverness to the lock.',
+				],
+				bullets: ['The job has a documented lock key and scope', 'Acquisition and release use the same database session', 'The scheduler’s overlap behavior is tested, not assumed', 'Work and dependencies have bounded timeouts', 'External effects are idempotent or reconciled after crashes', 'Skipped runs are either acceptable or durably recorded for replay', 'Connection-pool usage and lock contention are observable', 'An operator can inspect, retry, or disable the job safely'],
+			},
+		],
+	},
 ];

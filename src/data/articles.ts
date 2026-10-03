@@ -4332,4 +4332,94 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'validate-json-api-requests-json-schema-nodejs',
+		title: 'How to Validate JSON API Requests with JSON Schema in Node.js',
+		seoTitle: 'Validate JSON API Requests with JSON Schema | PilotLab',
+		dek: 'A practical validation boundary for Node.js APIs: define the contract, reject malformed input consistently, keep schemas strict, and test the cases that protect your business rules.',
+		published: '2026-10-03',
+		updated: '2026-10-03',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to validate JSON API requests with JSON Schema in Node.js',
+		intro: 'A request body is untrusted input, even when it came from your own front end. Hand-written checks tend to drift: one route forgets a required field, another accepts unknown properties, and a third returns a different error shape that clients cannot handle. JSON Schema gives a Node.js API a portable contract for the structure of JSON data. This tutorial shows where to validate, how to keep the schema and business rules separate, and how to verify the boundary without treating structural validation as authorization or complete domain validation.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'JSON Schema — Core Specification, Draft 2020-12', url: 'https://json-schema.org/draft/2020-12/json-schema-core' },
+			{ label: 'JSON Schema — Validation Specification, Draft 2020-12', url: 'https://json-schema.org/draft/2020-12/json-schema-validation' },
+			{ label: 'Ajv — Getting started', url: 'https://ajv.js.org/guide/getting-started.html' },
+			{ label: 'IETF RFC 9457 — Problem Details for HTTP APIs', url: 'https://www.rfc-editor.org/rfc/rfc9457' },
+			{ label: 'OWASP API Security Top 10', url: 'https://owasp.org/API-Security/editions/2023/en/0x00-header/' },
+		],
+		sections: [
+			{
+				heading: 'Define the boundary before writing the schema',
+				paragraphs: [
+					'Use JSON Schema for claims about the shape and basic values of a JSON document: required properties, types, lengths, ranges, formats, arrays, and allowed values. It is a good fit for an API request contract because the schema can be reviewed independently of the route implementation and shared with clients or documentation tooling. JSON Schema describes validation constraints; it does not decide whether the authenticated caller may edit a record or whether a SKU exists.',
+					'Begin with one command, such as POST /projects. Write examples for a valid request and each meaningful invalid class before translating them into keywords. Decide whether omitted and null mean different things, whether unknown properties are rejected, and whether the endpoint accepts one representation or several. These decisions are product behavior, not just validator settings.',
+				],
+				bullets: ['Validate content type and body size before expensive parsing', 'Derive tenant and user identity from authentication, never from the body', 'Separate structural checks from authorization and database-backed rules', 'Choose a stable error contract such as application/problem+json', 'Version the schema when clients cannot all migrate together'],
+			},
+			{
+				heading: 'Write a strict, readable request schema',
+				paragraphs: [
+					'A small object schema should state its type, required fields, property constraints, and unknown-property policy. For example, a project-creation request might require a name and visibility, limit the name length, and permit only public or private visibility. Use additionalProperties: false when silently accepting typos would be dangerous; if forward compatibility matters, document which extension namespace is allowed instead of accepting everything accidentally.',
+					'Keep the schema about the wire format. If the API accepts a date-time string, validate its shape and then convert it at the application boundary. If a field is an amount, validate its numeric or string representation according to the contract, then apply currency and accounting rules in domain code. Avoid placing database lookups, permission decisions, or side effects inside custom validation keywords.',
+				],
+				bullets: [
+					'$schema: https://json-schema.org/draft/2020-12/schema',
+					'type: object with properties, required, and additionalProperties: false',
+					'name: { type: string, minLength: 1, maxLength: 120 }',
+					'visibility: { type: string, enum: [public, private] }',
+					'Use $defs and $ref for repeated shapes, but keep the request schema easy to review',
+				],
+			},
+			{
+				heading: 'Compile once and validate at the HTTP edge',
+				paragraphs: [
+					'Ajv compiles a JSON Schema into a JavaScript validation function. Compile schemas during application startup or module initialization and reuse the function; compiling on every request adds avoidable work and makes configuration errors appear only under traffic. Pin the validator and dialect you use, and fail startup if a schema cannot compile rather than accepting requests with an unknown contract.',
+					'In the route, parse the body through the framework’s bounded JSON parser, run the compiled validator, and stop before calling a repository or downstream API when validation fails. Copy the validator’s error collection before another validation call overwrites it. Map errors to a safe client response containing a stable type, status, field path, and human-readable detail; do not return stack traces, schema internals, or raw customer input in logs.',
+				],
+				bullets: [
+					"const validateCreateProject = ajv.compile(createProjectSchema);",
+					'if (!validateCreateProject(body)) return problemResponse(400, validateCreateProject.errors);',
+					'Use one compiled validator per schema and keep it outside the request handler',
+					'Choose whether the API returns all safe field errors or only the first error',
+					'Use 400 for malformed request content when that is your documented API policy',
+				],
+			},
+			{
+				heading: 'Do not confuse validation with business safety',
+				paragraphs: [
+					'A valid document can still describe an impossible or forbidden operation. After structural validation, authorize the action against the authenticated principal and tenant, normalize values according to the domain contract, and check state that only the server knows: uniqueness, ownership, inventory, workflow transitions, and current version. Keep those checks explicit so a future schema change cannot accidentally widen permission.',
+					'Treat validated data as safer to process, not as trusted in every context. A string that passes a format check can still be displayed unsafely, used in a query incorrectly, or contain a value that is unacceptable to a downstream provider. Parameterize database queries, escape output for its destination, enforce resource-level authorization, and apply rate and size limits independently. OWASP’s API guidance is a reminder that input validation is only one control in an API security boundary.',
+				],
+				bullets: ['Authentication identifies the caller; authorization permits the action', 'JSON Schema checks structure; domain code checks current business state', 'Use server-owned fields for IDs, tenant, timestamps, and audit metadata', 'Never allow a client body to select another tenant or bypass a workflow state', 'Validate again at trust boundaries when data comes from a queue or third party'],
+			},
+			{
+				heading: 'Return errors clients can act on',
+				paragraphs: [
+					'Pick one error shape and use it for parser failures, schema failures, and domain validation failures. RFC 9457 defines the problem-details media type and common members such as type, title, status, detail, and instance. You can add an errors array with a JSON Pointer-like path and a stable code, for example name.required or visibility.enum. Keep the codes stable even when the prose changes.',
+					'Do not reveal whether a private resource exists just because one validation path is more specific than another. For an authenticated update, authorization may need to happen before detailed field or existence errors. Log the full diagnostic context only in a protected system, with request ID, route, schema version, and redaction; the response should contain what the client needs to correct its request and nothing more.',
+				],
+				bullets: ['Set Content-Type: application/problem+json for problem details', 'Include a request or instance ID that support can search', 'Use stable machine-readable error codes and safe field paths', 'Do not echo secrets, authorization headers, full bodies, or stack traces', 'Document which failures are retryable and which require a changed request'],
+			},
+			{
+				heading: 'Test the contract and its failure modes',
+				paragraphs: [
+					'Test the validator directly for required, wrong-type, boundary, enum, unknown-property, nested-object, array, and malformed-JSON cases. Then test through the real HTTP route so parser limits, content type, authentication middleware, status codes, and error serialization are covered together. Include a valid request that is rejected by authorization and a structurally valid request that fails a domain rule; those cases prove the layers are not being conflated.',
+					'Add compatibility tests for important clients and keep the schema in the same review path as the handler. If the API publishes OpenAPI separately, check that the request schema and OpenAPI component do not drift. Measure validation failures by route, schema version, and safe error code. A sudden rise in unknown-property failures may indicate a client rollout problem rather than malicious traffic.',
+				],
+				bullets: ['Valid fixture reaches business logic exactly once', 'Missing, extra, null, wrong-type, and oversized fields are rejected as designed', 'Malformed JSON never reaches the repository or downstream service', 'A valid body cannot cross a tenant or authorization boundary', 'Error responses have stable content type, status, code, and request ID', 'Schemas compile during startup and fail deployment when invalid', 'Client fixtures catch accidental breaking changes', 'Metrics and logs do not retain sensitive request payloads'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'JSON Schema is a strong contract for JSON structure, but it is not a complete API security system, a database constraint, or a substitute for tests. Keep request limits, authentication, authorization, output encoding, dependency timeouts, and business invariants in their own explicit controls. Prefer a small schema that says what the endpoint accepts over a giant schema that tries to encode every rule in the product.',
+					'Roll out one route first. Compare rejected requests before and after the boundary, review the most common client corrections, and make the migration path clear when existing clients send fields the new schema disallows. The useful result is not merely fewer 500 responses; it is an API whose accepted inputs, rejected inputs, and next actions are predictable to both clients and operators.',
+				],
+				bullets: ['Schema dialect, validator version, and compilation policy are pinned', 'Body size and content type are checked before validation work', 'Structural validation, authorization, and domain checks are separate', 'Unknown fields and nullability behavior are intentional and documented', 'Problem responses are stable, safe, and observable', 'Contract and HTTP integration tests run before deployment', 'Backward compatibility and client migration are owned', 'Operators can disable or roll back the boundary without accepting unsafe data'],
+			},
+		],
+	},
 ];

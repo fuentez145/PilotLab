@@ -21,6 +21,86 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'propagate-trace-context-background-jobs-nodejs',
+		title: 'How to Propagate Trace Context Through Node.js Background Jobs',
+		seoTitle: 'Propagate Trace Context Through Node.js Jobs | PilotLab',
+		dek: 'Connect an HTTP request to the queue publish, worker process, and downstream calls without leaking payloads or pretending asynchronous work is one ordinary span.',
+		published: '2026-10-04',
+		updated: '2026-10-04',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to propagate trace context through Node.js background jobs',
+		intro: 'A request that hands work to a queue often becomes invisible at the moment you need it most. The API returns quickly, the worker runs in another process, and an operator is left with a job ID but no path from the original request to the eventual failure. Trace context propagation closes that gap: inject the active context into message metadata, extract it when the worker receives the message, and create spans that describe publishing, processing, and downstream work. This tutorial uses OpenTelemetry’s Node.js APIs and a provider-neutral message envelope, while keeping delivery semantics and sensitive data explicit.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OpenTelemetry — JavaScript context propagation', url: 'https://opentelemetry.io/docs/languages/js/propagation/' },
+			{ label: 'OpenTelemetry — Semantic conventions for messaging spans', url: 'https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/' },
+			{ label: 'W3C — Trace Context Recommendation', url: 'https://www.w3.org/TR/trace-context/' },
+		],
+		sections: [
+			{
+				heading: 'Prerequisites: decide what the trace should explain',
+				paragraphs: [
+					'This pattern fits a web API that publishes durable jobs to a queue and a separately running Node.js worker. You need OpenTelemetry SDK initialization in both processes, a queue that can carry string or key-value message metadata, a stable job or operation ID, and a trace backend or console exporter for local verification. The queue library can change; the propagation boundary should not.',
+					'Decide whether the worker’s processing span should be a child of the publish context or linked to it. For a single message sent because of one request, a child relationship is easy to follow. For a batch, fan-out, or message consumed by multiple workers, links may describe the relationship more accurately than forcing one parent. OpenTelemetry’s messaging conventions distinguish producer, receive, process, and settle work; use the shape your broker and operation actually have.',
+				],
+				bullets: ['Install @opentelemetry/api in code that only needs the API', 'Initialize the SDK before loading instrumented HTTP, queue, or database modules', 'Define a message envelope with a payload reference and propagation carrier', 'Choose what creates the logical operation ID and how long it is retained', 'Keep queue metadata free of secrets, customer payloads, and raw authorization data'],
+			},
+			{
+				heading: 'Inject the active context when publishing',
+				paragraphs: [
+					'OpenTelemetry’s JavaScript propagation API serializes the active context into a carrier. For a queue message, the carrier is ordinary message metadata rather than HTTP headers. Inject at the point where the producer span is active, then serialize only the carrier fields your broker supports. The W3C Trace Context format uses traceparent and tracestate for portable context; do not invent a second trace ID field and expect tracing tools to connect it automatically.',
+					'Create a producer span around the publish operation if the queue client is not already instrumented. Keep the message body focused on business data or references. Propagation metadata identifies the trace position, not the job’s authorization or retry policy; those belong in separately validated fields with their own retention and access rules.',
+				],
+				bullets: [
+					"import { context, propagation, trace } from '@opentelemetry/api';",
+					"const tracer = trace.getTracer('orders-api');",
+					"await tracer.startActiveSpan('send orders.process', async (span) => { const carrier: Record<string, string> = {}; propagation.inject(context.active(), carrier); await queue.publish({ body: { orderId }, headers: carrier }); span.end(); });",
+					'Use try/finally or an equivalent helper so producer spans end on publish failure as well as success',
+					'Use a stable operation or job ID for application correlation, but never use it as a substitute for traceparent',
+				],
+			},
+			{
+				heading: 'Extract context and create a worker processing span',
+				paragraphs: [
+					'When the worker receives a message, extract the carrier and run the processing callback inside the extracted context. The callback must establish the active context before it calls instrumented HTTP clients, databases, or other queues; extracting values without making the context active produces disconnected child spans. Validate the message envelope before doing business work, and treat malformed or untrusted propagation metadata as a message error rather than a reason to crash the worker.',
+					'A receive or poll span describes obtaining the message from the broker; a process span describes the business operation. Some queue libraries or instrumentations create these automatically. If you add manual spans, avoid creating a duplicate tree that makes one message look like two executions. End the process span only after the acknowledgment or settlement decision is known, and record the final error without putting the full payload into attributes.',
+				],
+				bullets: [
+					"import { ROOT_CONTEXT, context, propagation, trace } from '@opentelemetry/api';",
+					"const parent = propagation.extract(ROOT_CONTEXT, message.headers);",
+					"await context.with(parent, () => tracer.startActiveSpan('process orders.process', async (span) => { await handle(message.body); span.end(); }));",
+					'Use the SDK’s configured context manager so async continuations retain the active context across awaits',
+					'Name spans with low-cardinality operation and destination values; never put order IDs or tenant IDs in span names',
+					'If the message has no valid parent, start a new root trace and keep the job ID as a separate safe correlation field'],
+			},
+			{
+				heading: 'Separate tracing from delivery and retry semantics',
+				paragraphs: [
+					'A trace shows causality; it does not make a queue exactly once. A worker can crash after an external side effect and before acknowledgment, causing redelivery. Keep the idempotency key, attempt count, visibility timeout, and dead-letter policy in the job contract. On a retry, decide whether to create a new processing span linked to the original attempt or continue a trace only while the retention and backend behavior make that useful. Do not keep one span open for hours while a message waits in a queue.',
+					'Record queue delay separately from processing duration. The time between publish and receive is a queue-health signal, while the process span measures handler work. For a long wait, use a producer timestamp or a safe enqueue time metric; do not derive customer-facing promises from trace timestamps alone when clocks or sampling differ. OpenTelemetry’s messaging guidance is still marked Development, so pin conventions and review instrumentation changes rather than assuming every backend renders them identically.',
+				],
+				bullets: ['Producer publish failed: end the producer span with an error and do not claim a job was accepted', 'Worker processing failed transiently: record the error, leave the message retryable, and bound attempts', 'Worker processing failed permanently: settle to a dead-letter or failed state with an operator path', 'Side effect succeeded before crash: rely on idempotency or reconciliation, not the trace, to prevent duplication', 'Batch fan-out: use links or explicit operation correlation rather than one misleading parent chain'],
+			},
+			{
+				heading: 'Verify the complete trace locally',
+				paragraphs: [
+					'Start with a console exporter and one local API, queue stub, and worker. Send a request that publishes a job, then let the worker process it and make one instrumented downstream request. Inspect the output for a shared trace ID or the documented link relationship, a producer span, a worker process span, and a child client span. The exact span names depend on your instrumentation; the causal relationship and useful attributes are what matter.',
+					'Add tests for missing headers, malformed traceparent, queue redelivery, concurrent workers, a worker crash before acknowledgment, and a downstream timeout. Assert that the business result remains idempotent and that tracing failure never blocks the job path unless you intentionally chose fail-closed telemetry. Then test sampling: a sampled parent may produce no visible child in one backend, so operational correlation should also include a safe job ID and request ID.',
+				],
+				bullets: ['One request produces a producer span linked to the queue operation', 'The worker extracts context before invoking instrumented dependencies', 'A downstream HTTP or database span has the expected trace relationship', 'A malformed carrier starts safe new tracing context and does not crash the worker', 'A redelivered message is visible as another attempt without implying a second business success', 'Console output and exported attributes contain no tokens, raw bodies, or personal data'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Export through an OTLP collector or your chosen backend rather than relying on console output. Set sampling, retention, access control, and redaction deliberately. Trace context is metadata that crosses trust boundaries; W3C documents privacy considerations, and your system should accept only the propagation formats and destinations it expects. Do not forward arbitrary user-supplied trace headers into privileged internal work without the same validation and trust-boundary controls as any other request metadata.',
+					'Finally, make tracing one signal among several. Use metrics for queue depth, age, throughput, retries, and dead letters; logs for bounded business decisions and operator detail; traces for the path through services and jobs. The useful outcome is not a visually impressive trace. It is being able to start from a failed request or job ID, find the responsible attempt, understand where time was spent, and recover without duplicating the underlying business action.',
+				],
+				bullets: ['SDK initialization order is tested in API and worker startup commands', 'Propagation carrier fields are allowlisted and size-bounded', 'Queue delay, processing duration, retries, and dead letters have metrics', 'Job idempotency and reconciliation are tested independently of tracing', 'Sampling and retention preserve enough data for incident investigation', 'Span attributes use stable, low-cardinality names and exclude sensitive payloads', 'Runbooks explain how to move from request ID to job ID to trace and worker attempt', 'Telemetry outages do not silently change delivery or authorization behavior'],
+			},
+		],
+	},
+	{
 		slug: 'set-timeout-budgets-nodejs-api-calls',
 		title: 'How to Set Timeout Budgets for Node.js API Calls',
 		seoTitle: 'Timeout Budgets for Node.js API Calls | PilotLab',

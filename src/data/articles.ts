@@ -21,6 +21,74 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'build-safe-api-search-postgresql-full-text',
+		title: 'How to Build a Safe API Search Endpoint with PostgreSQL Full-Text Search',
+		seoTitle: 'Build a Safe API Search Endpoint with PostgreSQL | PilotLab',
+		dek: 'A practical search endpoint for product teams: normalize input, rank useful matches, protect tenant boundaries, paginate predictably, and verify the query under real load.',
+		published: '2026-10-06',
+		updated: '2026-10-06',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to build a PostgreSQL full-text search API',
+		intro: 'Search is often added as a text box and a database wildcard, then becomes a reliability and product problem when the dataset grows. A useful search API needs a clear matching contract, input limits, tenant-aware authorization, a query plan that remains bounded, and a response that explains what the client can do next. This tutorial uses PostgreSQL full-text search as the engine, but keeps the HTTP boundary independent of the database so the design can evolve.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'PostgreSQL Documentation — Full Text Search', url: 'https://www.postgresql.org/docs/current/textsearch.html' },
+			{ label: 'PostgreSQL Documentation — Controlling Text Search', url: 'https://www.postgresql.org/docs/current/textsearch-controls.html' },
+			{ label: 'Microsoft Learn — Web API Design Best Practices', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+		],
+		sections: [
+			{
+				heading: 'Define what search means before writing SQL',
+				paragraphs: [
+					'Start with the user decision the results support. Searching a product catalog, support tickets, and internal documents need different fields, ranking, visibility rules, and empty-result behavior. Write the contract for one resource first: which fields are searched, whether matching is by words or exact identifiers, how filters combine with text, and what “relevance” is allowed to mean.',
+					'PostgreSQL full-text search tokenizes documents and queries into searchable lexemes, then compares them using a text-search configuration. That is different from substring matching: a search for a part number, email address, or arbitrary prefix may need a separate exact or trigram strategy. Do not silently promise autocomplete, typo correction, or semantic similarity when the implementation only searches normalized words.',
+				],
+				bullets: ['Name the searchable fields and their weights', 'Separate full-text search from exact ID, SKU, and prefix lookup', 'Define language, stemming, case, punctuation, and stop-word behavior', 'Set a maximum query length and result limit', 'Document whether no results is normal, an error, or a prompt to broaden the search'],
+			},
+			{
+				heading: 'Normalize and validate the request at the API boundary',
+				paragraphs: [
+					'Accept a structured request such as `GET /tickets?q=delivery&status=open&limit=20`. Trim and normalize the query, reject control characters and unreasonable lengths, parse filters against an allowlist, and clamp the limit. Parameterize values; never build a `to_tsquery` expression by concatenating raw user input. If the product needs advanced operators, expose a deliberately parsed grammar and test each operator rather than enabling database syntax by accident.',
+					'Apply authorization and tenant predicates as part of the database query, not after fetching a broad result set. A search result is still protected data. The API should return the same safe shape for an empty result and should not reveal whether a forbidden record exists through counts, timing-sensitive error messages, or a different status code.',
+				],
+				bullets: ['Validate query, filters, sort, cursor or offset, and limit separately', 'Use an allowlist for searchable fields and sortable fields', 'Parameterize every user value', 'Resolve tenant and permissions from authenticated context', 'Return a stable machine-readable validation error without database details'],
+			},
+			{
+				heading: 'Build the document and query expressions deliberately',
+				paragraphs: [
+					'Create a weighted document from the fields the user expects to matter. A title can carry more weight than a long body, while an internal note may be excluded entirely. PostgreSQL documents `setweight` and `ts_rank` for this purpose. Store a generated or maintained `tsvector` column when appropriate, and add a GIN index so the database can find candidates without calculating a full ranking for every row.',
+					'Use `websearch_to_tsquery` when the interface accepts ordinary search language and you want a forgiving query parser, or use `plainto_tsquery` for a simpler word-based contract. Choose the function based on the documented behavior and PostgreSQL version you run. Rank only authorized candidates, add a deterministic secondary order such as `id`, and avoid presenting the score as an objective measure of relevance across unrelated queries.',
+				],
+				bullets: ['Weight title, identifier, and body fields according to the user task', 'Use the same text-search configuration for indexing and querying', 'Add a GIN index and inspect the actual query plan', 'Rank candidates, then apply a stable tie-breaker', 'Keep exact identifier search as a separate optimized path where needed'],
+			},
+			{
+				heading: 'Paginate without hiding the cost',
+				paragraphs: [
+					'For a small admin result set, a bounded offset may be adequate and easy for clients to understand. For a feed that changes while the user reads it, use a cursor tied to the search query, filters, ranking order, and tenant. A cursor is only valid for the ordering that produced it; do not let a client reuse one search token with a different query or sort mode.',
+					'Always cap the page size and set a server-side work budget. Search endpoints are vulnerable to expensive terms, broad filters, and repeated deep pagination. Track query duration, rows examined, result count, and rejected requests. When the user needs a complete export, create an asynchronous export job instead of allowing an HTTP client to walk an unbounded live search result.',
+				],
+				bullets: ['Return `data`, an explicit pagination marker, and a bounded page', 'Bind cursor state to normalized query, filters, sort, and tenant', 'Use a stable secondary order for equal ranks', 'Reject or queue requests that exceed the search budget', 'Offer a separate export workflow for large result sets'],
+			},
+			{
+				heading: 'Test relevance, isolation, and failure modes',
+				paragraphs: [
+					'Build fixtures that represent real search decisions: exact identifiers, plural and inflected words, punctuation, missing fields, accents, very long input, no matches, and terms that appear in low-weight fields. Compare the returned order against examples reviewed by a domain owner. Search quality is a product decision; a passing SQL test does not prove that the first result is the one a user needs.',
+					'Test authorization negatively. Create similar records for two tenants, query as each tenant, and verify that no result, count, snippet, or timing-dependent error crosses the boundary. Exercise database unavailability, an invalid text-search expression, a slow query, and a client disconnect. The endpoint should fail clearly, preserve capacity for other requests, and never fall back to an unfiltered query.',
+				],
+				bullets: ['Representative queries have reviewed expected results', 'Tenant and record-level permission tests are negative by default', 'Long, empty, malformed, and adversarial inputs are bounded', 'The plan uses the intended index under realistic data volume', 'Timeouts and database failures produce safe, observable errors', 'Search logs exclude raw sensitive queries where retention is not justified'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Full-text search is a strong fit when the application needs word-based retrieval close to its transactional data. It is not a universal replacement for a dedicated search system. Faceting across large datasets, typo tolerance, multilingual analyzers, geo queries, autocomplete, and complex highlighting may justify another engine—but the same API discipline still applies: explicit fields, authorization before results, bounded work, versioned behavior, and measurable relevance.',
+					'Roll out behind a feature flag or to a small audience. Keep representative queries and latency baselines, reindex deliberately after changing the document or text-search configuration, and document how stale indexes are detected. The useful search endpoint is not the one with the most operators; it is the one users can trust to return permitted, explainable results within a predictable budget.',
+				],
+				bullets: ['Search behavior and language configuration are documented', 'Indexes are monitored and reindexing is a tested operation', 'Query, result, latency, and zero-result metrics have privacy controls', 'Tenant and permission predicates are part of every query plan', 'Limits, timeouts, and export boundaries protect the API', 'A fallback or degraded mode is explicit rather than an unfiltered query', 'Relevance examples are reviewed after schema or ranking changes', 'The team knows when to adopt a dedicated search service'],
+			},
+		],
+	},
+	{
 		slug: 'propagate-trace-context-background-jobs-nodejs',
 		title: 'How to Propagate Trace Context Through Node.js Background Jobs',
 		seoTitle: 'Propagate Trace Context Through Node.js Jobs | PilotLab',

@@ -21,6 +21,75 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'design-http-content-negotiation-api',
+		title: 'How to Use HTTP Content Negotiation Without Breaking API Clients',
+		seoTitle: 'HTTP Content Negotiation for APIs | PilotLab',
+		dek: 'A practical guide to serving the right representation: define media types, honor Accept safely, return useful 406 and 415 errors, and test compatibility before clients depend on it.',
+		published: '2026-10-08',
+		updated: '2026-10-08',
+		readTime: '9 min read',
+		category: 'API engineering',
+		keyword: 'how to use HTTP content negotiation in an API',
+		intro: 'An API often has more than one useful representation of a resource: JSON for an application, CSV for an export, or a versioned media type for a contract that must evolve. Content negotiation gives clients and servers a standard way to agree on that representation, but an overly clever implementation can make debugging and compatibility much harder. This tutorial keeps negotiation narrow and explicit: define supported media types, parse the request headers deliberately, vary responses only when necessary, and make unsupported choices actionable.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — Content negotiation', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Content_negotiation' },
+			{ label: 'MDN — Accept header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Accept' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+			{ label: 'IETF RFC 9457 — Problem Details for HTTP APIs', url: 'https://www.rfc-editor.org/rfc/rfc9457' },
+		],
+		sections: [
+			{
+				heading: 'Choose representations that solve a real client problem',
+				paragraphs: [
+					'Content negotiation is useful when the same resource has genuinely different representations. A browser-facing document, a machine-readable JSON response, and a downloadable CSV can share a resource identity while serving different clients. Do not add a negotiation layer merely to rename one JSON shape: a clear versioned endpoint or an explicit query parameter may be easier to operate when the choice is a product option rather than a representation preference.',
+					'Write the supported contract before implementing middleware. For each resource, name the media types, required fields, encoding, caching behavior, and whether the representation is read-only or supports writes. Keep the first version small. Every additional format becomes a compatibility promise, a test matrix, and an error path your team must support.',
+				],
+				bullets: ['Start with one canonical representation such as application/json', 'Add text/csv or another format only when a client workflow needs it', 'Use vendor or profile media types for deliberate contract variants, not arbitrary strings', 'Document whether a representation is stable, experimental, or deprecated', 'Keep authorization and resource identity independent of the chosen format'],
+			},
+			{
+				heading: 'Parse Accept as a preference, not a permission bypass',
+				paragraphs: [
+					'The Accept request header tells a server which media types the client can handle, potentially with quality weights. A client might send `application/json`, `text/csv;q=0.8`, or `*/*`. The server should select from an allowlist of representations it actually implements; it must not treat a client-supplied type as a reason to serialize internal fields or skip validation.',
+					'For a small API, a deterministic selection policy is safer than a general-purpose negotiation engine: prefer the highest supported quality, use a documented server-side tie-breaker, and reject a request when none of the allowed types is acceptable. Be cautious with wildcards. Supporting `*/*` does not mean every future format is automatically safe to expose.',
+				],
+				bullets: ['Normalize type and subtype case and parse parameters deliberately', 'Ignore unknown parameters only when the media-type contract permits it', 'Apply q weights, then use a stable documented tie-breaker', 'Treat `*/*` as permission to choose a documented default, not all formats', 'Never derive fields, permissions, or SQL behavior directly from Accept'],
+			},
+			{
+				heading: 'Separate response negotiation from request validation',
+				paragraphs: [
+					'Accept describes the desired response. Content-Type describes the representation sent in the request body. Validate them separately. A POST endpoint can support `application/json` request bodies while returning either JSON or a problem response according to Accept. If the request body format is unsupported or malformed, return a clear 415 Unsupported Media Type or a validation error rather than silently parsing it as something else.',
+					'On a successful response, set Content-Type to the representation actually sent, including the media type parameters that matter to clients. On an error, use `application/problem+json` when that is part of the API contract and include a stable type, title, status, detail safe for the caller, and an instance or request identifier. Error negotiation should not hide an actionable failure behind an empty 406 response.',
+				],
+				bullets: ['Accept: what the client wants back', 'Content-Type on the request: what the client sent', 'Content-Type on the response: what the server actually returned', '415: the request representation is unsupported', '406: no supported response representation matches the request', 'Keep problem details safe, stable, and useful to both clients and support'],
+			},
+			{
+				heading: 'Use Vary and caching deliberately',
+				paragraphs: [
+					'When the response changes based on a request header, shared caches need to know which header participated in the selection. Add `Vary: Accept` for an endpoint whose representation changes with Accept. Without that signal, a cache can reuse a JSON response for a client that requested CSV. Conversely, do not add every request header to Vary: a broad or unstable key can destroy cache reuse and increase origin load.',
+					'If the representation also depends on authentication, tenant, locale, or another input, classify the response before enabling shared caching. A Vary header does not repair a cache policy that allows private data to be stored publicly. Use explicit private or no-store behavior where appropriate, and include representation-specific validators if you want conditional requests to avoid retransmitting unchanged bodies.',
+				],
+				bullets: ['Add `Vary: Accept` when Accept changes the representation', 'Include other varying headers only when they truly affect the body', 'Do not treat Vary as an authorization boundary', 'Test a shared-cache scenario with JSON followed by CSV', 'Keep validators and cache policy consistent with each representation'],
+			},
+			{
+				heading: 'Test the matrix before publishing the contract',
+				paragraphs: [
+					'Build table-driven tests around the negotiation policy rather than testing only one browser request. Include missing Accept, a supported exact type, a weighted list, a wildcard, an unsupported type, malformed parameters, and a request that asks for a representation the caller is not authorized to receive. Assert the status, Content-Type, body schema, and Vary header together.',
+					'Then test intermediaries and clients. Request JSON, then CSV, through the same cache or reverse proxy and confirm that the second response is not the first response with the wrong Content-Type. Test generated SDKs, older clients, retries, and error handling. A new representation should be additive only if the default remains stable and clients can identify the chosen format from the response headers.',
+				],
+				bullets: ['Missing Accept receives the documented default', 'Quality weights choose the highest supported representation', 'Unsupported Accept returns a useful 406 response', 'Unsupported request Content-Type returns 415 before business logic', 'The response schema matches its declared Content-Type', 'Cache tests prove JSON and CSV cannot cross-contaminate', 'Authorization is enforced before serialization for every representation'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Negotiation is a boundary contract, not a formatting convenience. Keep the supported list observable, but log normalized media-type decisions rather than raw headers when headers may contain unnecessary client detail. Monitor 406 and 415 rates, representation usage, serialization failures, response size, and cache hit behavior. A spike in one format can reveal a broken SDK or an undocumented client assumption.',
+					'When the contract must change incompatibly, do not hope that a clever Accept parser will save it. Publish an explicit migration path, support the old representation for a documented period, and remove it only after usage and owners are known. The best negotiation design gives clients choice without making the server’s behavior surprising.',
+				],
+				bullets: ['Supported media types are documented and allowlisted', 'Default behavior is stable for existing clients', 'Request and response formats are validated independently', '406 and 415 responses explain the next client action', 'Vary, validators, and cache directives match actual dependencies', 'Representation-specific authorization and redaction tests pass', 'Usage and failure metrics have safe, low-cardinality labels', 'Deprecation and removal dates are communicated before a format disappears'],
+			},
+		],
+	},
+	{
 		slug: 'build-safe-api-search-postgresql-full-text',
 		title: 'How to Build a Safe API Search Endpoint with PostgreSQL Full-Text Search',
 		seoTitle: 'Build a Safe API Search Endpoint with PostgreSQL | PilotLab',

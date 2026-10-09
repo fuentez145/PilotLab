@@ -4718,4 +4718,86 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'limit-nodejs-outbound-concurrency',
+		title: 'How to Limit Outbound Concurrency in Node.js',
+		seoTitle: 'Limit Outbound Concurrency in Node.js | PilotLab',
+		dek: 'A practical semaphore for protecting databases and APIs from bursts: bound in-flight work, define queue behavior, propagate cancellation, and verify fairness under load.',
+		published: '2026-10-09',
+		updated: '2026-10-09',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to limit outbound concurrency in Node.js',
+		intro: 'An asynchronous function is not automatically cheap. If a request loops over 500 records and starts 500 fetches at once, the promises may be non-blocking while the database, connection pool, remote API, or your own process absorbs an uncontrolled burst. A concurrency limit is a small admission-control boundary: it decides how many operations may be in flight, what happens to the rest, and how cancellation and failure are handled. This tutorial builds a dependency-free semaphore for Node.js and shows where it belongs in a production system.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Learn — Do not block the Event Loop or Worker Pool', url: 'https://nodejs.org/en/learn/asynchronous-work/dont-block-the-event-loop' },
+			{ label: 'MDN — Promise.allSettled()', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled' },
+			{ label: 'Microsoft Learn — Throttling pattern', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/throttling' },
+		],
+		sections: [
+			{
+				heading: 'Decide what resource you are protecting',
+				paragraphs: [
+					'Concurrency is the number of operations in progress at one time; it is not the same as requests per second. A fast dependency may tolerate many short calls but fail when too many connections are held open. A slow dependency may need both a small in-flight limit and a rate limit. Start with one boundary such as outbound calls to a partner API, database queries for an export, or image processing jobs. Do not put one global number around unrelated work.',
+					'Node.js documentation explains that a small number of threads serve many clients and that long-running work can block the Event Loop or Worker Pool. A semaphore does not make CPU-heavy JavaScript safe, and it does not replace a timeout. It controls admission to asynchronous work so a burst does not immediately consume every local or downstream slot.',
+				],
+				bullets: ['Name the dependency, operation, and capacity you are protecting', 'Measure connection-pool limits, provider quotas, latency, and payload size first', 'Separate interactive traffic from bulk or scheduled work', 'Set a timeout for every admitted operation', 'Decide whether excess work should wait, fail fast, or move to a durable queue'],
+			},
+			{
+				heading: 'Implement a small semaphore with explicit queue behavior',
+				paragraphs: [
+					'For one Node.js process, a FIFO queue is often enough. Each caller waits until a permit is available; the permit is released in a finally block whether the operation succeeds, rejects, or is cancelled. Keep the implementation provider-neutral so it can wrap fetch, a database call, or a bounded unit of a worker.',
+					'The important invariant is that active never exceeds the configured limit. Also decide what happens when the process is shutting down or the wait queue is too large. Unbounded waiting is only a delayed memory problem, so production code should cap queued work or hand it to a durable job system.',
+				],
+				bullets: [
+					"class Semaphore { private active = 0; private waiters: Array<() => void> = []; constructor(private readonly limit: number) { if (!Number.isInteger(limit) || limit < 1) throw new Error('invalid limit'); }",
+					"async run<T>(task: () => Promise<T>): Promise<T> { await this.acquire(); try { return await task(); } finally { this.release(); } }",
+					"private acquire(): Promise<void> { if (this.active < this.limit) { this.active++; return Promise.resolve(); } return new Promise(resolve => this.waiters.push(() => { this.active++; resolve(); })); }",
+					"private release(): void { const next = this.waiters.shift(); if (next) next(); else this.active--; }",
+					'Add queue-length limits, shutdown rejection, and waiter cancellation before using this minimal shape for untrusted or very long workloads',
+				],
+			},
+			{
+				heading: 'Use it at the dependency boundary, not around the whole request',
+				paragraphs: [
+					'Place the semaphore immediately around the scarce operation. If a request parses input, performs a local permission check, and then calls a partner API, acquire the permit for the partner call rather than for the entire HTTP handler. That keeps local work responsive and makes the metric describe the resource you intended to protect. For a database pool, align the limit with the pool and reserve capacity for interactive queries instead of allowing an export to occupy every connection.',
+					'Pass the caller deadline or AbortSignal into the task. A caller that has gone away should not remain in the wait queue indefinitely. If the task times out after acquiring a permit, fetch may stop locally while the remote operation remains uncertain; classify that outcome and do not blindly retry unsafe writes. Concurrency control and request cancellation solve different parts of the failure path.',
+				],
+				bullets: ['Acquire only immediately before the scarce outbound operation', 'Release in finally on success, error, timeout, and cancellation', 'Use separate semaphores for materially different dependencies or priorities', 'Bound queued requests and return a typed overload or busy error when full', 'Keep authorization and tenant isolation outside the assumption that a permit implies permission'],
+			},
+			{
+				heading: 'Choose parallelism and backpressure deliberately',
+				paragraphs: [
+					'For independent reads, bounded parallelism usually reduces total time compared with serial work, but the best limit is empirical. Start conservatively, measure dependency latency and error rate, then increase only while the downstream system and the user-visible deadline remain healthy. A limit of ten per process can become one hundred across ten replicas, so calculate fleet-wide pressure rather than tuning one container in isolation.',
+					'When work is optional or bulk-sized, failing fast can be better than building a long in-memory queue. When the caller needs completion and the work can outlive an HTTP deadline, return an operation ID and queue it instead. Microsoft describes throttling as a way to cap consumption and keep a service within its objectives, with load leveling and priority deferral as alternatives when demand exceeds capacity.',
+				],
+				bullets: ['Interactive requests get reserved capacity or a higher priority than bulk work', 'A full wait queue produces an actionable 429, 503, or queued-job response', 'Per-tenant limits prevent one customer from consuming all shared capacity', 'A fleet limit accounts for replica count, regions, and autoscaling', 'Backoff and jitter apply to retries; they do not replace the concurrency limit'],
+			},
+			{
+				heading: 'Make partial success and errors observable',
+				paragraphs: [
+					'When processing many independent items, do not use Promise.all if one rejection should not hide the outcomes of the other items. MDN documents Promise.allSettled() for collecting a result for every input after all have settled. Combine it with the semaphore so only a bounded number of tasks are active while the caller receives a deliberate summary of fulfilled, rejected, and skipped work.',
+					'Instrument the boundary with low-cardinality labels: dependency, operation, result class, queue wait duration, active count, and task duration. Do not put URLs with tokens, request bodies, tenant IDs, or item identifiers into metric labels. Track queue rejection and wait time separately from downstream latency; otherwise a rising queue can look like a slow provider and lead to the wrong fix.',
+				],
+				bullets: ['Every task has a bounded timeout and a classified outcome', 'Promise.allSettled() results are mapped to a safe domain response', 'Queue wait, active permits, task duration, and rejection count are measured', 'Retry counts and downstream status codes remain separate from semaphore metrics', 'Logs include a safe operation and correlation ID without sensitive payloads'],
+			},
+			{
+				heading: 'Verify limits, fairness, and shutdown behavior',
+				paragraphs: [
+					'Test with a controllable dependency that records active calls and delays selected responses. Submit more tasks than the limit and assert that the recorded maximum never exceeds it. Make one task reject, one time out, and one caller cancel while waiting. The permit count must return to zero and later work must still run; a missing finally is the classic leak that only appears after a failure.',
+					'Then test real deployment math. Run multiple process instances or simulate their combined limits, test a full queue, and stop accepting new work during shutdown. Decide whether queued tasks are rejected, drained within a deadline, or moved to a durable queue. Use a load test to compare throughput, tail latency, dependency errors, memory use, and user-visible completion—not just average duration.',
+				],
+				bullets: ['Active work never exceeds the per-process limit', 'A rejected or timed-out task releases its permit exactly once', 'FIFO behavior is acceptable or priority rules are tested explicitly', 'A cancelled waiter leaves no orphaned queue entry', 'Queue limits protect memory during a burst', 'The fleet-wide outbound rate stays within the dependency contract', 'Shutdown rejects new work and handles existing work within a deadline', 'The fallback or queued-job response is honest about incomplete work'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'A semaphore is a local control. It does not coordinate replicas, guarantee fairness across processes, enforce a provider’s rolling quota, or make side effects idempotent. For shared limits, use a gateway or a distributed admission mechanism designed for that purpose. For long-running work, use a durable queue with leases, retries, and an operator path instead of keeping thousands of promises alive in a web process.',
+					'Treat the limit as an operational setting with an owner and a rollback path. Review it after changing replica count, connection pools, provider quotas, or task latency. The useful outcome is not maximum parallelism; it is predictable pressure: the application stays responsive, dependencies receive work at a rate they can handle, and callers can tell whether their work completed, was deferred, or should be tried again.',
+				],
+				bullets: ['Concurrency, rate, timeout, and retry policies are documented separately', 'The limit is scoped to a real scarce resource and accounts for replicas', 'Wait queues are bounded, observable, and safe during shutdown', 'Bulk work cannot starve interactive traffic', 'Errors, cancellation, and unknown write outcomes have explicit semantics', 'Load tests cover tail latency, dependency errors, memory, and partial results', 'A durable queue replaces in-memory waiting when work outlives the request', 'Operators can tune or disable the boundary without editing emergency code'],
+			},
+		],
+	},
 ];

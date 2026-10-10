@@ -4800,4 +4800,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-http-message-signatures-api-requests',
+		title: 'How to Use HTTP Message Signatures for API Requests',
+		seoTitle: 'HTTP Message Signatures for API Requests | PilotLab',
+		dek: 'A practical guide to signing selected HTTP components, covering the body correctly, rejecting stale requests, and choosing when standard message signatures are worth the complexity.',
+		published: '2026-10-10',
+		updated: '2026-10-10',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to use HTTP message signatures for API requests',
+		intro: 'TLS protects an HTTP connection, but an API request may cross a proxy, gateway, or queue before the application verifies it. When the receiver needs end-to-end evidence about who authorized a request and which parts were signed, HTTP Message Signatures provide a standard structure for that decision. This tutorial explains the boundary without pretending that a signature replaces TLS, authorization, replay protection, or careful key management.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'IETF RFC 9421 — HTTP Message Signatures', url: 'https://www.rfc-editor.org/rfc/rfc9421' },
+			{ label: 'IETF RFC 9530 — Digest Fields', url: 'https://www.rfc-editor.org/rfc/rfc9530' },
+			{ label: 'Node.js Documentation — crypto.sign()', url: 'https://nodejs.org/api/crypto.html#cryptosignalgorithm-data-key-callback' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Decide whether message signatures solve your problem',
+				paragraphs: [
+					'Use a message signature when the receiver needs application-level integrity or authenticity for selected HTTP components, especially across intermediaries or when the request will be verified after the original connection ends. RFC 9421 defines a signature base, the Signature-Input metadata that describes it, and the Signature field that carries the result. It supports asymmetric signatures and message authentication codes, but it is a toolkit rather than a complete security policy.',
+					'For a simple webhook from one provider, the provider’s documented signing scheme and official verifier are usually the safer choice. Adopt RFC 9421 when you control both sides, need a portable contract across services, or need to sign more than an opaque body. Keep HTTPS anyway: message signatures do not provide confidentiality, endpoint authentication by themselves, or protection against every transport attack.',
+				],
+				bullets: ['Name the trust boundary and the component that must be protected', 'Choose asymmetric keys when verifiers should not hold a signing secret', 'Keep TLS for confidentiality and connection security', 'Write the allowed algorithms and key IDs in server configuration', 'Do not invent a signature format when a provider already publishes one'],
+			},
+			{
+				heading: 'Select and bind the components deliberately',
+				paragraphs: [
+					'A signature is only as meaningful as the components it covers. Start with the method, target path, authority, and a freshness value such as created or expires. Add headers whose values affect authorization or routing, and add a content digest when the body must be covered. RFC 9421 uses derived components such as @method and @path so the signer and verifier can construct the same signature base without copying the entire HTTP message into a separate object.',
+					'Do not sign a header at the sender and silently let a proxy rewrite it before verification. Decide which transformations are allowed, whether the verifier sees the original or forwarded authority, and which proxy headers are trusted. Signatures over a component do not automatically make the surrounding request safe: the application still has to normalize and authorize the parsed values.',
+				],
+				bullets: ['Use a documented component list rather than signing “whatever is present”', 'Include @method, @path, and @authority when request routing matters', 'Cover the body with a digest when body integrity is part of the contract', 'Keep signed headers stable across trusted proxies', 'Reject missing required components instead of verifying a weaker variant'],
+			},
+			{
+				heading: 'Cover the body with a digest, not an accidental re-serialization',
+				paragraphs: [
+					'HTTP Message Signatures do not directly cover message content. RFC 9421 describes using a digest field for that purpose, and RFC 9530 defines the current HTTP digest fields and algorithms. Compute the digest over the exact bytes sent on the wire, send the digest with the request, and include the digest component in the signature. On receipt, verify the digest before passing the body to business logic.',
+					'This matters for JSON. Parsing and serializing an object can change whitespace, property order, escaping, or number representation. If the sender signs one byte sequence and the receiver verifies a newly serialized object, the check no longer proves what arrived. Preserve raw bytes at the HTTP boundary, verify the digest and signature, then parse once the request is trusted enough for application processing.',
+				],
+				bullets: ['Hash the raw request bytes, not a parsed object', 'Use one explicitly configured digest algorithm', 'Reject a missing, malformed, or mismatched digest', 'Apply body-size limits before buffering or hashing', 'Keep the raw body out of logs unless retention and access are justified'],
+			},
+			{
+				heading: 'Implement signing and verification with fixed policy',
+				paragraphs: [
+					'Keep the cryptographic operation behind a small adapter. The application should provide a canonical component list, key ID, algorithm, creation time, expiry, and request values; the adapter should construct the signature base and call the platform crypto API. Node’s crypto.sign() accepts the algorithm, signed data, and private key, but it does not define HTTP canonicalization for you. Use a reviewed RFC 9421 implementation or a carefully tested adapter rather than concatenating strings ad hoc.',
+					'On verification, look up the key by an allowlisted key ID, require the configured algorithm, parse Signature-Input and Signature strictly, rebuild the expected base, verify the cryptographic result, and then apply freshness and authorization policy. The key ID is a lookup hint, not permission to fetch arbitrary URLs or algorithms. Rotate keys with overlapping validity and an explicit retirement plan.',
+				],
+				bullets: ['Allowlist key IDs, algorithms, and covered components', 'Reject duplicate or ambiguous signature parameters', 'Validate created and expires against a bounded clock-skew policy', 'Use constant-time comparison where the chosen primitive requires it', 'Keep private keys in a secret manager or hardware-backed service', 'Return one safe authentication error without exposing parser details'],
+			},
+			{
+				heading: 'Block replay and verify the real failure modes',
+				paragraphs: [
+					'A valid signature can be copied and submitted again. Include a freshness window and require a nonce or unique request identifier for operations where replay would cause harm. Store recently accepted identifiers within the validity window, scoped to the signer and operation, with an atomic uniqueness check. A timestamp alone reduces the replay window; it does not make a payment or state-changing command exactly once.',
+					'Test through the actual reverse proxy and framework. Send a valid request, change one signed component, change only the body bytes, remove a required parameter, use an unknown key, move the clock outside the window, and replay the same nonce concurrently. Also test harmless proxy transformations and key rotation. Assert that rejected requests do not reach business handlers and that the logs contain a safe reason class, key ID, request ID, and clock decision—not secrets or full payloads.',
+				],
+				bullets: ['A modified path, method, authority, header, or body is rejected', 'A valid but expired request is rejected before side effects', 'A reused nonce is rejected atomically under concurrency', 'An unknown key ID cannot trigger arbitrary network retrieval', 'The old key works only during the documented rotation overlap', 'Proxy and framework handling preserves the signed values', 'Authorization and idempotency remain separate checks'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Treat a message-signature rollout like a protocol change. Publish the component contract, algorithm policy, key discovery or distribution method, clock tolerance, error behavior, and rotation schedule. Roll out verification in observe-only mode only if the security boundary permits it; for protected state changes, fail closed once clients are ready. Keep a compatibility path only for a defined migration window.',
+					'Signatures prove that a configured signer produced an accepted representation of selected message components at a time the verifier considers fresh. They do not prove that the request is authorized for this tenant, that the business command is safe to repeat, that a proxy is trustworthy, or that the payload is semantically valid. Those controls still belong in authentication, authorization, validation, idempotency, and audit design.',
+				],
+				bullets: ['TLS, authentication, authorization, validation, and signatures have separate owners', 'The signed component list and canonicalization behavior are versioned', 'Digest verification happens before parsing and business handling', 'Freshness, nonce storage, and clock skew are bounded and monitored', 'Key rotation and compromise response are rehearsed', 'Metrics distinguish parse, digest, signature, freshness, and authorization failures', 'Replay tests run through the production proxy path', 'The team knows when a provider-specific verifier is safer than custom protocol work'],
+			},
+		],
+	},
 ];

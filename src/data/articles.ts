@@ -4869,4 +4869,109 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'version-webhook-payloads-without-breaking-consumers',
+		title: 'How to Version Webhook Payloads Without Breaking Consumers',
+		seoTitle: 'Version Webhook Payloads Without Breaking Consumers | PilotLab',
+		dek: 'A practical contract for evolving webhooks: classify changes, publish explicit versions, run a compatibility window, and migrate consumers without duplicating side effects.',
+		published: '2026-10-11',
+		updated: '2026-10-11',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to version webhook payloads without breaking consumers',
+		intro: 'A webhook payload is an API contract delivered outside your request-response cycle. Once another team or customer has built a handler, a seemingly harmless field rename can stop billing updates, fulfillment, or notifications. This guide presents a provider-neutral migration pattern: define a stable event envelope, classify schema changes, publish an explicit version, support old and new consumers during a bounded window, and make replay and duplicate handling part of the design rather than an afterthought.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Stripe Docs — Handle webhook versioning', url: 'https://docs.stripe.com/webhooks/versioning' },
+			{ label: 'Microsoft Learn — Best practices for RESTful web API design', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+			{ label: 'Martin Fowler — Feature Toggles', url: 'https://martinfowler.com/articles/feature-toggles.html' },
+		],
+		sections: [
+			{
+				heading: 'Treat the payload as a contract, not an internal object',
+				paragraphs: [
+					'Begin by separating the domain event from the database record that happens to produce it. A consumer should receive the fields it needs to act, not a dump of columns that can change with an internal refactor. Microsoft’s API guidance frames representations as the data exchanged across a deliberately designed interface; the same principle applies when the interface is an outbound webhook.',
+					'Write down the event name, delivery semantics, identifier rules, timestamp meaning, tenant scope, authentication or signature scheme, retry behavior, and retention policy. Make the envelope boring and stable. Put business-specific fields under a versioned data object so a consumer can route by event type and version before it interprets the payload.',
+				],
+				bullets: [
+					'Use a stable event ID for deduplication and support investigations',
+					'Keep `type`, `version`, `occurred_at`, `delivery_id`, and `data` meaningfully defined',
+					'Use resource IDs and current state where a full private record is unnecessary',
+					'Document whether timestamps are event time, enqueue time, or delivery time',
+					'Never treat a webhook signature as a replacement for authorization or idempotency',
+				],
+			},
+			{
+				heading: 'Classify changes before choosing a version',
+				paragraphs: [
+					'Not every change needs a new payload version. Adding an optional field is usually compatible if consumers are required to ignore unknown fields. Removing a field, changing its type, changing enum meaning, renaming a property, or changing the interpretation of an existing value can break a consumer and should be treated as a contract change. “The JSON still parses” is not a compatibility test.',
+					'Keep event versioning distinct from delivery attempts. A retry of version 1 is still version 1; it should not silently be upgraded because the producer has since deployed version 2. If the event represents a state transition that can be replayed later, preserve the original version and provide a documented way to retrieve the current resource when appropriate.',
+				],
+				bullets: [
+					'Compatible: add an optional field with a documented default or absence meaning',
+					'Potentially breaking: tighten validation or change null, empty, and missing semantics',
+					'Breaking: rename, remove, or change the type or meaning of an existing field',
+					'Breaking: reorder or reinterpret enum values that consumers may persist',
+					'Keep a machine-readable schema and human migration notes for every published version',
+				],
+			},
+			{
+				heading: 'Choose an explicit versioning boundary',
+				paragraphs: [
+					'For webhooks, the version can live in the event envelope, a media type, an endpoint configuration, or a separate URL. Pick one primary mechanism that the receiver can inspect before parsing version-specific data. An envelope field such as `version: "2026-10-11"` is easy to log and route; separate endpoints can isolate old and new code but add configuration and operational work. Do not combine several partially authoritative version signals.',
+					'Stripe’s webhook guidance illustrates an important operational property: an endpoint has a defined API version, and upgrading it is handled as a migration with a new endpoint, testing, monitoring, and a deliberate shutdown of the old path. You do not need to copy Stripe’s product-specific mechanism, but you should copy the idea that a version upgrade is a controlled deployment rather than a field edit hidden in a normal release.',
+				],
+				bullets: [
+					'Prefer one authoritative version signal per endpoint contract',
+					'Route on the envelope before deserializing version-specific data',
+					'Keep a version-specific schema and fixtures in source control',
+					'Publish the support window, migration deadline, and removal owner',
+					'Use a new endpoint or consumer route when isolation is safer than branching one handler',
+				],
+			},
+			{
+				heading: 'Run old and new consumers side by side',
+				paragraphs: [
+					'Build the new consumer against recorded fixtures and a sandbox endpoint before changing production delivery. During the migration window, send the new version to a separate route or deliver both versions from the same durable event record. The receiver can compare normalized business outcomes, but it must not perform the real side effect twice. A shadow handler should validate and record its decision without sending an email, issuing a refund, or mutating the system of record.',
+					'If you operate the producer and consumer, deploy the consumer that understands both versions first. Then change the producer’s routing or endpoint configuration, monitor the new path, and only remove the old handler after the compatibility window has elapsed and usage confirms that no supported consumer remains. A flag can control exposure, but it should not become a permanent undocumented protocol layer; Fowler’s feature-toggle guidance emphasizes assigning different lifecycles and removing temporary toggles.',
+				],
+				bullets: [
+					'Consumer first: accept the old and new versions before the producer changes',
+					'Use a fixture corpus from real-shaped, privacy-safe events',
+					'Shadow new parsing and comparison must be side-effect free',
+					'Log version, event type, delivery result, and consumer build with bounded labels',
+					'Give every migration route an owner and a removal date',
+				],
+			},
+			{
+				heading: 'Make retries, ordering, and replay version-aware',
+				paragraphs: [
+					'Webhooks arrive more than once, can arrive late, and may not arrive in the order your business process expects. Store a receipt keyed by the provider event ID or another producer-defined stable identifier, enforce uniqueness in the database, and make the business side effect idempotent as well. A receipt check alone cannot prevent duplication if a worker crashes after the side effect but before marking the event complete.',
+					'Keep replay behavior explicit. A support tool should be able to replay the original bytes and headers for a known delivery, or deliberately request a newly rendered current representation—those are different operations. Do not let a “retry” button silently convert an old event into a new schema version. When ordering matters, include a resource sequence or revision and reject, defer, or reconcile stale events according to a documented policy.',
+				],
+				bullets: [
+					'Persist event ID, version, attempt count, receipt state, and last error',
+					'Enforce uniqueness atomically rather than with check-then-insert logic',
+					'Keep side effects idempotent even when the worker crashes at the boundary',
+					'Distinguish original-byte replay from current-resource re-rendering',
+					'Use sequence or revision checks only when the domain actually requires ordering',
+				],
+			},
+			{
+				heading: 'Verify compatibility and retire deliberately',
+				paragraphs: [
+					'Test the contract at three levels: schema, handler behavior, and delivery operations. Schema tests catch missing or wrongly typed fields. Handler tests prove that both versions produce the intended business decision. Delivery tests exercise signatures, retries, timeouts, duplicate deliveries, dead letters, and replay through the same proxy and queue path used in production.',
+					'Before retirement, measure actual version usage by endpoint and consumer—not just configuration files. Send a warning or a safe migration response to unsupported versions, but do not acknowledge an event as successful if the consumer cannot process it. After the deadline, disable the old route, retain enough metadata to investigate historic deliveries, and remove version branches from application code so the compatibility cost does not become permanent.',
+				],
+				bullets: [
+					'Each supported version has valid, representative fixtures',
+					'Consumer contract tests cover unknown fields, missing fields, nulls, and enum changes',
+					'Duplicate, delayed, malformed, unsigned, and replayed deliveries have tested outcomes',
+					'Production metrics show success, retry, dead-letter, latency, and version usage',
+					'Old and new handlers cannot both perform the same real side effect',
+					'Removal is announced, observable, reversible during the window, and owned',
+				],
+			},
+		],
+	},
 ];

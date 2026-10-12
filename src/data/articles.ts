@@ -4974,4 +4974,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'tune-postgresql-connection-pool-nodejs-api',
+		title: 'How to Tune a PostgreSQL Connection Pool for a Node.js API',
+		seoTitle: 'Tune a PostgreSQL Connection Pool for Node.js APIs | PilotLab',
+		dek: 'Choose a pool size from database capacity and request behavior, release clients safely, observe queueing, and verify shutdown without turning a slow query into an outage.',
+		published: '2026-10-12',
+		updated: '2026-10-12',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to tune a PostgreSQL connection pool for a Node.js API',
+		intro: 'A PostgreSQL connection pool is an admission-control boundary, not a magic performance switch. Too few connections can make healthy requests wait; too many can exhaust database capacity and make every query slower. This tutorial gives small product teams a practical way to size and operate a `pg` pool in a Node.js API, then verify the decision with measurements instead of copying a default from another application.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'node-postgres — Pooling', url: 'https://node-postgres.com/features/pooling' },
+			{ label: 'node-postgres — Pool API', url: 'https://node-postgres.com/apis/pool' },
+			{ label: 'PostgreSQL Documentation — Connection settings', url: 'https://www.postgresql.org/docs/current/runtime-config-connection.html' },
+			{ label: 'PostgreSQL Documentation — Message flow', url: 'https://www.postgresql.org/docs/current/protocol-flow.html' },
+		],
+		sections: [
+			{
+				heading: 'Understand what the pool is protecting',
+				paragraphs: [
+					'Each database connection consumes server and application resources, and a connected client can execute only one query at a time in the normal request flow. A pool lets several API requests reuse a bounded set of connections instead of performing a new handshake for every query. The bound is the important part: when all clients are busy, new work waits or fails according to your policy rather than opening unbounded sessions.',
+					'Count every process that connects to the database. If four API replicas each open a pool of 20, the database may receive up to 80 application connections before migrations, workers, admin tools, and monitoring are included. PostgreSQL’s `max_connections` is a server capacity setting, not a recommendation for the size of one application pool. Leave headroom for maintenance and other workloads.',
+				],
+				bullets: ['Use one long-lived pool per Node.js process, not one pool per request', 'Count API replicas, workers, cron jobs, migrations, and operator sessions', 'Treat pool capacity as shared database capacity', 'Keep a margin below the server connection limit', 'Tune from query duration and wait time, not CPU count alone'],
+			},
+			{
+				heading: 'Start with one pool and explicit limits',
+				paragraphs: [
+					'Create the pool during application startup and configure it from deployment settings. `pg` exposes controls such as `max`, `idleTimeoutMillis`, and `connectionTimeoutMillis`; the right values depend on your database, traffic, and query mix. A small API should begin with a conservative pool and increase it only when measurements show queueing at the pool—not merely because requests are slow.',
+					'Use the convenience `pool.query()` method for independent single queries. For a transaction, check out one client, run every statement on that same client, and release it in a `finally` block. A transaction split across pool clients is not one transaction. If checkout can wait indefinitely, a database incident can turn into a request pile-up, so give acquisition a deadline and map exhaustion to an observable, bounded failure.',
+				],
+				bullets: [
+					"const pool = new Pool({ max: 10, connectionTimeoutMillis: 1000, idleTimeoutMillis: 30000 });",
+					"pool.on('error', (error) => logger.error({ error }, 'idle PostgreSQL client error'));",
+					"const result = await pool.query('select * from accounts where id = $1', [accountId]);",
+					'Use parameterized queries and keep pool construction outside route handlers',
+					'For transactions: acquire, begin, commit or rollback, then always release',
+				],
+			},
+			{
+				heading: 'Size the pool from the whole deployment',
+				paragraphs: [
+					'Pick a database connection budget first. Subtract reserved capacity for administrative access, background workers, read replicas if applicable, and failover behavior. Divide the remaining budget across the maximum number of application processes, then leave room for a temporary rollout where old and new replicas overlap. The result is a starting point, not a promise that every replica should use the same number forever.',
+					'Consider the work each request holds while it owns a connection. A fast indexed query releases capacity quickly; a report query, transaction waiting on a lock, or accidental N+1 loop holds it longer. Increasing `max` can increase concurrency against the database without reducing the underlying query time. If the pool is full because queries are slow, inspect plans, locks, and transaction scope before adding connections.',
+				],
+				bullets: ['Write down the maximum replica count, not only today’s count', 'Reserve connections for workers, migrations, and incident access', 'Account for rolling deploy overlap and autoscaling', 'Measure checkout wait, active clients, idle clients, and query duration', 'Fix slow or blocked queries before treating a larger pool as the remedy'],
+			},
+			{
+				heading: 'Make transactions and errors release capacity',
+				paragraphs: [
+					'The most damaging pool bug is a client that is checked out and never returned. A thrown query, failed commit, cancelled request, or early return must still reach `client.release()`. If a transaction is left open, it can retain locks and snapshots as well as occupy a pool slot. Roll back when possible, but release even when rollback itself fails; log both failures with a request or operation ID.',
+					'Keep transactions short and explicit. Do not perform an outbound HTTP call, wait for user input, or run an unbounded loop while holding a database client. Validate inputs before checkout where possible, fetch only the rows needed, and commit the smallest durable unit. A pool cannot protect a service that holds every connection while waiting on an unrelated dependency.',
+				],
+				bullets: ['Acquire only after request validation and authorization', 'Use `try`, `catch`, and `finally` around every checked-out client', 'Rollback on failure, then release regardless of rollback outcome', 'Never hold a transaction open across a remote API call', 'Set statement, lock, and transaction timeouts appropriate to the operation'],
+			},
+			{
+				heading: 'Observe waiting, saturation, and database health',
+				paragraphs: [
+					'Expose pool metrics without exposing SQL text or customer data. Track total, idle, and waiting clients, checkout wait duration, checkout failures, query duration, transaction age, and error class. A rising waiting count with low database utilization can indicate a leak or a pool configuration problem; high database CPU or lock wait with a full pool points to database or query pressure instead.',
+					'Correlate pool measurements with PostgreSQL activity and application traffic. Look for long transactions, blocked sessions, connection churn, and a change in query shape after a release. Log the route family, operation name, pool wait, and a safe request ID. Do not label metrics with raw SQL, tenant IDs, URLs containing credentials, or unbounded error text.',
+				],
+				bullets: ['Alert on sustained pool wait and checkout timeout, not one slow request', 'Separate pool wait from time spent executing SQL', 'Monitor idle-in-transaction sessions and lock waits', 'Keep labels low-cardinality and redact query parameters', 'Compare API replica count with the database’s actual client count'],
+			},
+			{
+				heading: 'Verify sizing, failure modes, and graceful shutdown',
+				paragraphs: [
+					'Test with a representative workload: short reads, writes, transactions, slow queries, and concurrent requests. Establish a baseline with a small pool, then change one setting at a time. Confirm that a query waiting for a client is bounded by the acquisition timeout, that a slow query does not create unbounded connections, and that a client is returned after every success and failure path. Include a test that kills or cancels a request during a transaction and checks for leaked sessions.',
+					'On shutdown, stop accepting new requests, allow in-flight work to finish within a deadline, then call `pool.end()` and wait for it. The node-postgres documentation describes `pool.end()` as waiting for checked-out clients before closing the pool. Verify this in your deployment: a process that exits before draining can interrupt writes, while a process that never closes can delay rollout or keep stale connections around.',
+				],
+				bullets: ['Load tests show pool wait separately from query latency', 'Connection count stays within the calculated deployment budget', 'A checkout timeout returns a safe, retryable or degraded response', 'Concurrent transactions use one client each and preserve isolation', 'A client is released after query, rollback, cancellation, and commit errors', 'Shutdown drains requests and awaits `pool.end()`', 'A rolling deploy does not temporarily exceed database capacity', 'The runbook names the owner and rollback for pool configuration changes'],
+			},
+		],
+	},
 ];

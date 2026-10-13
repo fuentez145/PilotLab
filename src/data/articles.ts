@@ -5049,4 +5049,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'diagnose-long-tasks-web-application',
+		title: 'How to Diagnose Long Tasks in a Web Application',
+		seoTitle: 'Diagnose Long Tasks in a Web Application | PilotLab',
+		dek: 'Find the JavaScript and browser work blocking interaction, capture safe field evidence, and fix the right boundary instead of guessing from a Lighthouse score.',
+		published: '2026-10-13',
+		updated: '2026-10-13',
+		readTime: '9 min read',
+		category: 'Performance',
+		keyword: 'how to diagnose long tasks in a web application',
+		intro: 'A page can look complete and still feel broken when the main thread is busy doing work the user cannot interrupt. Long tasks make clicks, typing, scrolling, and animations wait behind JavaScript, rendering, or other browser work. This tutorial shows how to observe long-task entries, connect them to a reproducible profile, fix the underlying work, and report only the field data you can interpret safely. The goal is not to eliminate every task over an arbitrary number; it is to make the next user interaction responsive.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — PerformanceObserver', url: 'https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver' },
+			{ label: 'MDN — PerformanceLongTaskTiming', url: 'https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongTaskTiming' },
+			{ label: 'web.dev — Optimize long tasks', url: 'https://web.dev/articles/optimize-long-tasks' },
+			{ label: 'W3C — Long Tasks API', url: 'https://www.w3.org/TR/longtasks-1/' },
+		],
+		sections: [
+			{
+				heading: 'Define the symptom before instrumenting it',
+				paragraphs: [
+					'A long task is work that keeps the main UI thread occupied for at least 50 milliseconds. That threshold is a diagnostic boundary, not a complete user-experience score: a series of shorter tasks can still make an interaction expensive, and a single long task may be harmless on a screen the user never touches. Start with a visible symptom such as a delayed menu, a slow editor keystroke, or scrolling that pauses after a filter change.',
+					'The browser’s main thread handles much of the page’s JavaScript, parsing, layout, and rendering one task at a time. web.dev explains that breaking a long task into smaller tasks gives the browser opportunities to handle higher-priority work sooner. Before changing code, record the route, device class, interaction, data state, and whether the delay occurs during startup or after the page is already usable.',
+				],
+				bullets: ['Use a real user action as the investigation boundary', 'Record route, browser, device class, connection, and feature state', 'Separate startup work from interaction work', 'Treat 50 ms as an observation threshold, not a universal performance budget', 'Keep the user-visible symptom as the acceptance criterion'],
+			},
+			{
+				heading: 'Add a guarded PerformanceObserver',
+				paragraphs: [
+					'PerformanceObserver lets the browser notify your code when performance entries are recorded. The Long Tasks API exposes entries whose type is `longtask`, and MDN documents `buffered: true` for entries the browser retained while the document was being constructed. Feature-detect the entry type: MDN marks PerformanceLongTaskTiming as limited availability, so a missing observer is an unsupported measurement path, not proof that the page has no long work.',
+					'Keep the observer lightweight. Do not serialize full URLs, DOM trees, input values, or stack-like application data from the callback. Collect duration, start time, entry name, and a coarse route or release label, sample the event, and send a bounded batch later. A monitoring callback that performs expensive work can become another source of main-thread pressure.',
+				],
+				bullets: [
+					"const supported = PerformanceObserver.supportedEntryTypes?.includes('longtask');",
+					"if (supported) { const observer = new PerformanceObserver((list) => { for (const entry of list.getEntries()) reportLongTask({ duration: Math.round(entry.duration), startTime: Math.round(entry.startTime), name: entry.name }); }); observer.observe({ type: 'longtask', buffered: true }); }",
+					'Guard the API and the reporting transport so unsupported browsers continue normally',
+					'Batch or sample events and cap the number retained per page view',
+					'Disconnect the observer when the application scope is permanently disposed',
+				],
+			},
+			{
+				heading: 'Interpret entries without overclaiming the culprit',
+				paragraphs: [
+					'An entry tells you that the UI thread was occupied and gives timing and attribution fields; it does not automatically identify the exact function that caused the work. The name can describe the browsing context, and attribution may help with frames, but provider support varies. Use the entry to find affected sessions and time windows, then reproduce the same route and action in a profiler.',
+					'Join field observations to a release, route family, device bucket, and interaction marker rather than a customer identity. If you add marks around application actions, use stable names such as `catalog-filter` or `editor-save`, not record IDs or search text. Keep the dataset useful enough to compare releases without turning performance telemetry into a store of user content.',
+				],
+				bullets: ['Entry duration and start time are evidence, not a function-level diagnosis', 'Use Chrome DevTools Performance recordings to inspect the call tree and event sequence', 'Add bounded marks around important interactions to align profiles with field data', 'Compare distributions by release and device class, not only one average', 'Redact route parameters, input values, tokens, and customer identifiers'],
+			},
+			{
+				heading: 'Fix the work at the correct boundary',
+				paragraphs: [
+					'If the profile shows a large bundle being parsed or initialized, reduce shipped JavaScript, split code by route, and defer non-essential modules. If one event handler filters thousands of records, narrow the data first, virtualize the list, or move CPU-heavy transformation to a Web Worker when the work does not need direct DOM access. If rendering dominates, reduce component churn and avoid repeatedly forcing layout by mixing reads and writes carelessly.',
+					'For work that must continue after an interaction, yield between chunks so the browser can service input and rendering. web.dev describes `scheduler.yield()` with a cross-browser fallback as a way to break up long-running work, but a yield is not a substitute for doing less work. It can add overhead and change ordering, so preserve state explicitly and test intermediate UI behavior.',
+				],
+				bullets: ['Reduce or lazy-load code before trying to schedule more of it', 'Chunk large loops and yield between chunks when the work is interruptible', 'Use a Web Worker for CPU-heavy work that does not touch the DOM', 'Virtualize large lists instead of rendering every row', 'Batch DOM reads and writes and remove forced synchronous layout', 'Keep third-party scripts accountable for their own main-thread cost'],
+			},
+			{
+				heading: 'Verify the fix with repeatable evidence',
+				paragraphs: [
+					'Create a small test scenario with stable data and a named interaction. Capture a before profile, apply one change, and capture an after profile on the same device class or throttling setup. Confirm that the interaction completes correctly, the longest task or blocking portion improves, and the change did not move the cost into a slower network request, an unusable loading state, or a worker serialization bottleneck.',
+					'Use the field observer as a trend signal, not a lab replacement. A local profile can explain the call tree; field data tells you whether the fix helped the browsers and devices that matter. Wait for enough sampled sessions to compare the same route and release, and report support gaps separately so an unsupported API does not disappear into a “healthy” aggregate.',
+				],
+				bullets: ['The interaction remains functionally correct under slow and fast conditions', 'The before and after profiles use comparable route, data, and device settings', 'The fix reduces blocking work without merely hiding it behind a spinner', 'Field observations are compared by release, route, and device bucket', 'Unsupported Long Tasks API browsers have an explicit fallback measurement path', 'Telemetry overhead and sampling rates are checked in the performance budget'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Long-task monitoring is one instrument in a performance program. It does not replace INP, navigation timing, resource timing, server measurements, or a user session’s actual task success. The Long Tasks API is a Working Draft at W3C and has uneven browser support; keep the feature detection and a separate lab or interaction measurement path in place. Do not promise that removing every reported entry guarantees a fast application.',
+					'Keep a short runbook: identify the affected route and release, reproduce the interaction, record a profiler trace, classify the work as JavaScript, rendering, parsing, or third party, make one bounded change, and re-measure. That process is more durable than copying a generic “optimize JavaScript” checklist into every incident.',
+				],
+				bullets: ['Observer setup is feature-detected and failure-isolated', 'Events are sampled, bounded, and free of sensitive page data', 'Route, release, device, and interaction labels have low cardinality', 'Field data is interpreted with INP and other user-centered signals', 'DevTools profiles or equivalent traces are retained for confirmed regressions', 'Code splitting, workers, yielding, and rendering changes have regression tests', 'Third-party scripts have owners and an agreed performance budget', 'The team can roll back a performance change without losing the baseline'],
+			},
+		],
+	},
 ];

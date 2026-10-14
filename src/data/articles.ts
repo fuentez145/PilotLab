@@ -5124,4 +5124,86 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'implement-idempotency-keys-nodejs-api',
+		title: 'How to Implement Idempotency Keys for a Node.js API',
+		seoTitle: 'Implement Idempotency Keys for a Node.js API | PilotLab',
+		dek: 'A practical design for safe retries on state-changing endpoints: store the first result, detect conflicting reuse, bound retention, and test the crash windows that create duplicates.',
+		published: '2026-10-14',
+		updated: '2026-10-14',
+		readTime: '11 min read',
+		category: 'API engineering',
+		keyword: 'how to implement idempotency keys for a Node.js API',
+		intro: 'A client can lose a response after the server has completed a payment, order, or provisioning request. If it retries without a protocol for recognizing the original operation, the same business action may happen twice. Idempotency keys give a state-changing endpoint a way to treat a safe retry as the same logical request—but only when the server stores enough durable evidence, scopes the key correctly, and handles the crash between a side effect and its recorded result. This tutorial lays out a provider-neutral Node.js pattern and the tests that matter in production.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'AWS Builders’ Library — Making retries safe with idempotent APIs', url: 'https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/' },
+			{ label: 'Stripe — Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-method-properties' },
+			{ label: 'Microsoft Learn — Best practices for RESTful web API design', url: 'https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design' },
+		],
+		sections: [
+			{
+				heading: 'Decide what the key guarantees',
+				paragraphs: [
+					'An idempotency key is a client-provided name for one intended operation. The client generates it once for the logical action, sends it again when it is retrying that action, and generates a new key for a genuinely new action. The server uses the key to find a previous attempt and return the same outcome instead of executing the business operation again. This is different from making every request safe: a POST that creates a resource can still have side effects, and a key does not authorize the caller or validate the request.',
+					'Define the contract per endpoint before adding middleware. State what is keyed, how long a key is retained, whether the original status and body are replayed, and what happens when the same key arrives with different parameters. AWS describes idempotent APIs as a way for callers to retry without knowing whether the prior attempt succeeded; Stripe similarly documents replaying the result associated with a key. Those are useful patterns, not permission to copy a retention period or response policy without considering your own business operation.',
+				],
+				bullets: ['Use a key for a logical state-changing operation, not for every network packet', 'Scope uniqueness by authenticated principal, tenant, endpoint, and sometimes resource', 'Return the stored result for an exact retry', 'Reject the same key with a different request fingerprint', 'Document retention, concurrent behavior, and unknown outcomes'],
+			},
+			{
+				heading: 'Create the durable record before the side effect',
+				paragraphs: [
+					'The reliable implementation starts with a database record protected by a unique constraint. A useful record contains the scope, key, request fingerprint, status such as processing or completed, the response status, a response body or result reference, timestamps, and an expiry time. Store only what you need to replay safely; encrypt or minimize sensitive response data, and do not put raw authorization headers or full payment details into the record.',
+					'On the first request, insert the record atomically. If another request wins the same scoped key, read the existing record and either replay its completed result or return a documented in-progress response. Do not use a check-then-insert sequence without a uniqueness constraint: two concurrent requests can both observe “missing” and both begin the side effect. The idempotency table is a coordination boundary, not just a cache.',
+				],
+				bullets: [
+					"CREATE UNIQUE INDEX idempotency_scope_key ON idempotency_requests (tenant_id, endpoint, idempotency_key);",
+					'Validate authentication, authorization, content type, and basic request shape before creating the record',
+					'Normalize a canonical request representation before hashing it',
+					'Keep the unique key narrow enough to enforce the business contract but broad enough to prevent cross-tenant collisions',
+					'Use an atomic insert and handle the unique-violation path as normal concurrency, not as a 500'],
+			},
+			{
+				heading: 'Fingerprint the request without trusting the header alone',
+				paragraphs: [
+					'The key identifies an intended operation, but the header itself does not prove that a retry has the same inputs. Compute a fingerprint from the normalized fields that affect the business result: for example, an order ID, amount in minor units, currency, and selected line items. Use a canonical encoding with stable field ordering and explicit treatment of missing, null, and default values. A JSON hash of an object whose property order is uncontrolled is not a dependable comparison.',
+					'When an existing record has the same key but a different fingerprint, return a conflict such as 409 with a safe problem response. Do not silently choose the first request or overwrite its result. Never use a fingerprint as an authorization decision: authenticate the current caller and re-check that the caller may access the original operation before replaying any stored response.',
+				],
+				bullets: ['Hash only validated business inputs, not arbitrary headers or secrets', 'Include endpoint and tenant scope in the lookup, even if they are also in the database key', 'Treat a changed amount, resource, or operation type as a conflict', 'Do not reveal the original request body to a caller that fails authorization', 'Keep the canonicalization algorithm versioned if it may evolve'],
+			},
+			{
+				heading: 'Handle processing, completion, and uncertain outcomes',
+				paragraphs: [
+					'After claiming a new record, run the business operation inside the transaction boundary that actually protects it. For a local database mutation, the idempotency record and the domain change can often be committed together or connected through an outbox. For an external provider, they usually cannot be one transaction. A process can succeed at the provider, crash before saving the response, and leave the record in a state where the outcome is unknown.',
+					'Do not mark an unknown external write as failed and blindly execute it again. Use the provider’s own idempotency mechanism, query by a durable operation reference, or reconcile the result before deciding whether another attempt is safe. If a second request finds a processing record, choose a bounded behavior: wait only when the operation is short and the lock is observable, return 202 with a status resource, or return a retryable conflict with guidance. Never hold an HTTP connection open indefinitely behind another request.',
+				],
+				bullets: ['Processing: one owner is executing; concurrent callers cannot execute a second copy', 'Completed: replay the recorded status and body or a stable result resource', 'Failed before the side effect: allow a documented retry policy', 'Unknown external outcome: reconcile before repeating a non-idempotent write', 'Expired: reject old keys or start a new operation only under explicit policy'],
+			},
+			{
+				heading: 'Choose HTTP responses and retention deliberately',
+				paragraphs: [
+					'Use the endpoint’s ordinary success and domain-error responses for a completed replay so a client can handle the first result and the retry consistently. A request that is still being processed may use 202 and a status URL when the operation is asynchronous, or a documented 409/425-style response when the API needs the caller to retry later; choose one contract and make clients implement it. RFC 9110 defines method and status semantics, but it does not define a universal idempotency-key header or storage policy.',
+					'Retention is a correctness and privacy decision. Keep records at least as long as clients can reasonably retry and as long as support needs to distinguish a replay from a new action. Expiry should be enforced atomically with cleanup, and a reused key after expiry should not accidentally retrieve a deleted result. If response bodies are large or sensitive, store a durable result reference and re-authorize access instead of replaying an old private payload from an unbounded table.',
+				],
+				bullets: ['Make the required header, format, maximum length, and missing-key behavior explicit', 'Return a stable conflict for key reuse with different parameters', 'Use 202 plus a status resource for work that outlives the request', 'Set retention from retry and reconciliation needs, not a copied vendor default', 'Monitor processing age, conflict rate, replay rate, expiry cleanup, and storage growth'],
+			},
+			{
+				heading: 'Test the crash windows, not only the happy path',
+				paragraphs: [
+					'Table-test missing, malformed, repeated, concurrent, and expired keys. Send the exact same request twice and assert one business effect with the same observable result. Send the same key with one changed field and assert a conflict. Run the test as two concurrent requests against the real uniqueness constraint, not only a mocked repository, and verify that one request replays or waits according to the contract.',
+					'Then inject failures at each boundary: before the idempotency record, after it is claimed, after a local mutation, after an external provider accepts the write, before the response is persisted, and during cleanup. Restart the worker or API and verify that recovery converges without a duplicate effect. Include authorization tests across tenants, response-redaction tests, database failover, long-running processing, and a replay after the key’s retention window.',
+				],
+				bullets: ['The same key and fingerprint never create two local effects', 'A changed fingerprint cannot overwrite or read the first result', 'Concurrent callers observe one owner and a documented retry path', 'A client timeout followed by a retry does not duplicate the effect', 'An external write that completed before a crash is reconciled safely', 'A caller cannot replay another tenant’s result by guessing a key', 'Cleanup does not race with a valid retry or resurrect an old operation', 'Metrics and logs identify the operation without storing secrets or full payloads'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Idempotency keys reduce duplicate work; they do not solve every delivery problem. You still need authentication, authorization, input validation, timeouts, rate limits, durable job state, and an audit trail. A key also cannot make a non-transactional sequence atomic. If an order creation updates several systems, define which system owns the operation and use an outbox, workflow, or reconciliation process for the remaining steps.',
+					'Keep the implementation observable and boring. Record a low-cardinality endpoint and outcome, the key scope, processing age, and a correlation ID. Protect the idempotency store from unbounded growth, make key handling consistent across replicas, and document whether a response is replayed byte-for-byte or reconstructed from current state. The measure of success is not that retries disappear; it is that a lost response becomes recoverable without making the business action twice.',
+				],
+				bullets: ['Unique constraints and scope rules are enforced in the durable store', 'The request fingerprint and canonicalization rules are versioned and tested', 'Stored responses are minimized, protected, and re-authorized on replay', 'Local and external side effects have explicit transaction or reconciliation boundaries', 'Processing, completed, failed, and unknown states are visible to operators', 'Retry behavior is bounded and compatible with timeout and queue policies', 'Key retention and cleanup have capacity and privacy owners', 'Runbooks explain duplicate reports, unknown outcomes, manual reconciliation, and safe replay'],
+			},
+		],
+	},
 ];

@@ -5206,4 +5206,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-stale-while-revalidate-http-cache-safely',
+		title: 'How to Use stale-while-revalidate HTTP Caching Safely',
+		seoTitle: 'Use stale-while-revalidate HTTP Caching Safely | PilotLab',
+		dek: 'Serve cacheable data quickly while a cache revalidates it in the background—without leaking personalized responses or hiding an outage behind stale content.',
+		published: '2026-10-15',
+		updated: '2026-10-15',
+		readTime: '10 min read',
+		category: 'Web performance',
+		keyword: 'how to use stale-while-revalidate HTTP caching',
+		intro: 'A response does not have to choose between being perfectly fresh and making every user wait for the origin. For cacheable, non-personalized data, stale-while-revalidate can let a browser or shared cache serve a recently stale response while it checks the origin in the background. The directive is useful, but it is not a refresh mechanism, an authorization boundary, or a guarantee that every cache behaves identically. This tutorial shows how to choose safe candidates, compose Cache-Control directives, verify the wire behavior, and define what happens when the origin is slow or unavailable.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'RFC Editor — RFC 5861: HTTP Cache-Control Extensions for Stale Content', url: 'https://www.rfc-editor.org/rfc/rfc5861' },
+			{ label: 'RFC Editor — RFC 9111: HTTP Caching', url: 'https://www.rfc-editor.org/rfc/rfc9111' },
+			{ label: 'MDN — Cache-Control header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control' },
+			{ label: 'web.dev — Prevent unnecessary network requests with the HTTP Cache', url: 'https://web.dev/articles/http-cache' },
+		],
+		sections: [
+			{
+				heading: 'Choose data that can safely be a little old',
+				paragraphs: [
+					'stale-while-revalidate is a response Cache-Control extension. It tells a cache that, after the response becomes stale, it may serve that response for a bounded period while attempting revalidation without blocking the client. RFC 5861 describes this as a latency and availability trade-off: the caller may get the stored representation immediately, while the cache checks whether the origin still has the same content.',
+					'That trade-off only works when the product can tolerate bounded staleness. Good candidates include public documentation, catalog browsing data, feature configuration with a deliberate propagation delay, and a dashboard summary that already labels its timestamp. Do not start with balances, permissions, private account data, rapidly changing inventory, or anything where an old response could authorize an action.',
+				],
+				bullets: ['Define the maximum acceptable age in product terms, not only seconds', 'Prove that the response is identical or safely equivalent across callers before shared caching', 'Keep authorization and personalization outside a shared-cache reuse decision', 'Prefer a short-lived stale window when the cost of an old value is unclear', 'Use no-store or private when the response classification is uncertain'],
+			},
+			{
+				heading: 'Compose the header from explicit freshness windows',
+				paragraphs: [
+					'A practical public response might begin with `Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=30`. The browser can reuse it while fresh for 60 seconds; a shared cache can use its five-minute freshness policy; and the shared cache may serve it stale for up to another 30 seconds while it revalidates. The exact numbers are policy choices, not defaults to copy.',
+					'`stale-while-revalidate` does not replace `max-age` or `s-maxage`; it extends the period in which a cache may serve an otherwise stale response. `s-maxage` is useful when a CDN or reverse proxy should have a different freshness window from a browser. If an origin failure should not immediately become a hard error, consider `stale-if-error` separately and document how old a response may be during that failure path. RFC 5861 defines the extensions independently.',
+				],
+				bullets: ['Use `public` only for representations safe to share', 'Use `max-age` for private browser freshness and `s-maxage` for shared-cache freshness when they differ', 'Add `stale-while-revalidate=N` only when N is a reviewed staleness budget', 'Treat `stale-if-error=N` as a separate availability decision', 'Keep validators such as ETag or Last-Modified so revalidation can avoid a full body'],
+			},
+			{
+				heading: 'Do not confuse background revalidation with application refresh',
+				paragraphs: [
+					'The cache controls whether it can reuse a stored response; it does not tell your application to regenerate data on a timer. RFC 5861 says a cache should attempt revalidation when it serves stale content, but cache implementations and traffic patterns differ. Revalidation is normally triggered by a request, and the origin still needs to return a valid response or a 304 when the validator matches.',
+					'If a mutation must make a read path appear current immediately, use an explicit invalidation, versioned URL, short freshness policy, or an application-level read model. Do not tell users “the cache refreshed” when your cache provider has not confirmed that behavior. A stale response can also remain stale longer than expected when there is no traffic to trigger validation or when an intermediary does not support the extension as you assumed.',
+				],
+				bullets: ['Return ETag or Last-Modified for conditional requests where the representation supports it', 'Invalidate or version data whose freshness must change after a write', 'Treat cache revalidation as infrastructure behavior, not a business event', 'Do not keep one origin request open while waiting for a background refresh', 'Document provider-specific support and observe Age, cache status, and origin requests'],
+			},
+			{
+				heading: 'Protect shared caches from private data',
+				paragraphs: [
+					'The most dangerous cache mistake is serving a valid response to the wrong caller. A response that varies by cookie, authorization, tenant, locale, or feature assignment must not be placed in a shared cache unless the cache key and policy explicitly account for that variation and the result is still safe. `Vary` can describe selected request headers, but it does not replace application authorization or make an arbitrary header trustworthy.',
+					'Keep the cacheable representation separate from user-specific decoration when possible. For example, cache a public product description and fetch the caller’s entitlement separately. If that split is not real, use `private` or `no-store` and accept the origin cost. Test the actual CDN or reverse proxy configuration: browser behavior alone cannot prove that shared content is isolated.',
+				],
+				bullets: ['Never use a user-controlled tenant header as the identity or permission source', 'Do not combine `public` with a response that contains account or authorization data', 'Use `Vary` only for request inputs that genuinely change the representation', 'Keep cache keys bounded and normalized according to the endpoint contract', 'Re-check authorization before every state-changing action, even after a cached read'],
+			},
+			{
+				heading: 'Verify the policy at every cache layer',
+				paragraphs: [
+					'Test the wire contract with a controllable endpoint and the same cache path used in production. Make a request, inspect Cache-Control, ETag, Age, Date, and the provider’s cache-status header if available. Wait past `max-age`, request again, and confirm whether the response is served stale while the cache performs a conditional origin request. Then repeat with concurrent clients to see whether one origin refresh or many refreshes occur; the directive alone is not a universal stampede lock.',
+					'Exercise failures and identity boundaries. Return a changed representation, delay the origin, return a 500, send different authorization and language inputs, and compare browser, CDN, reverse-proxy, and application logs. Confirm that a failed revalidation does not cause a private response to be reused publicly, that stale-if-error is limited to its declared window, and that clients can see an honest timestamp or freshness label where the product needs one.',
+				],
+				bullets: ['Fresh responses are reused without an unnecessary origin request', 'Stale responses are served only inside the declared stale window', 'Revalidation uses the expected validator and updates the stored representation', 'A changed origin response replaces the old cached response', 'Origin errors follow the documented stale-if-error or failure policy', 'Concurrent misses and revalidations stay within the origin capacity budget', 'Tenant, authorization, language, and cookie variants cannot cross-contaminate', 'Deploy and purge tests cover old headers and old representations'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'stale-while-revalidate is a small control with a meaningful operational cost: users may see an older value, operators must understand which layer served it, and cache behavior may differ by browser, CDN, and reverse proxy. RFC 9111 defines the general HTTP caching model, while RFC 5861 is an informational extension; neither gives your product a universal freshness guarantee. Keep the policy close to the endpoint contract and revisit it when the response fields or permissions change.',
+					'Monitor cache hit and revalidation rates, response Age, origin load, stale-served counts, 304 responses, purge failures, and user-visible freshness complaints. Keep labels low-cardinality and never log private response bodies or tokens. The right outcome is not maximum cache age. It is a measurable reduction in repeated work with a staleness boundary that the product, security, and operations owners can all explain.',
+				],
+				bullets: ['Each stale-enabled route has an owner and written freshness budget', 'Cache-Control, validators, and invalidation behavior are tested together', 'Shared-cache eligibility is reviewed after schema or permission changes', 'Origin capacity includes revalidation traffic and rollout overlap', 'Stale responses are observable without storing sensitive bodies', 'The UI or API documents freshness when an old value could surprise users', 'A safe no-store or private fallback exists for uncertain classifications', 'The team can purge, disable, or roll back the policy without a code rewrite'],
+			},
+		],
+	},
 ];

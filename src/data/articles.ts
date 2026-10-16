@@ -21,6 +21,76 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'serve-large-file-downloads-with-http-range-requests',
+		title: 'How to Serve Large File Downloads with HTTP Range Requests',
+		seoTitle: 'Serve Large Downloads with HTTP Range Requests | PilotLab',
+		dek: 'Build resumable, seekable downloads with 206 Partial Content, Content-Range, bounded parsing, and Node.js streams—without turning a file endpoint into a memory or security problem.',
+		published: '2026-10-16',
+		updated: '2026-10-16',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to serve large file downloads with HTTP range requests',
+		intro: 'A download endpoint that always reads a whole file can waste memory, delay the first byte, and make interrupted transfers start over. HTTP range requests let a client ask for a byte slice so media players can seek and download tools can resume. The hard part is not opening a stream; it is implementing the wire contract precisely, bounding hostile ranges, keeping the selected file authorized, and verifying behavior through the proxy that users actually reach.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — Range header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Range' },
+			{ label: 'MDN — Content-Range header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Range' },
+			{ label: 'MDN — 206 Partial Content', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/206' },
+			{ label: 'MDN — 416 Range Not Satisfiable', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/416' },
+			{ label: 'Node.js — fs.createReadStream()', url: 'https://nodejs.org/api/fs.html#fscreatereadstreampath-options' },
+		],
+		sections: [
+			{
+				heading: 'Decide whether ranges solve the real problem',
+				paragraphs: [
+					'Range requests are a good fit for large immutable or slowly changing files: video, audio, PDFs, archives, and generated exports that clients may resume. A client sends `Range: bytes=0-999`; the server returns `206 Partial Content`, the selected bytes, and `Content-Range: bytes 0-999/TOTAL`. A server may ignore Range and return 200, but then pause and resume behavior is not a contract.',
+					'Choose one canonical representation before parsing the range. Authorization, tenant ownership, and file existence must be resolved from trusted application state. Never let a request range choose an arbitrary filesystem path, and do not assume that a signed download URL remains authorized after the underlying object is deleted or access is revoked.',
+				],
+				bullets: ['Use a stable file identity, not a user-provided path', 'Resolve authorization before opening the stream', 'Know the representation size and media type', 'Decide whether files are immutable, versioned, or checked on every request', 'Prefer one range per request until multipart responses are a real requirement'],
+			},
+			{
+				heading: 'Parse a single byte range safely',
+				paragraphs: [
+					'HTTP byte positions are zero-indexed and inclusive. Support the useful forms `start-end`, `start-`, and `-suffix-length`. Convert them to a bounded `{ start, end }` only after validating decimal syntax, rejecting negative or overflowing values, and clamping an end position beyond the file’s last byte to `size - 1`. A suffix length of zero has no useful representation and should be rejected according to your API policy.',
+					'Start with a single range. Multiple ranges require a correctly framed `multipart/byteranges` response, including boundaries and a Content-Range for every part. Silently serving only the first range can produce corrupt media or a client that waits for bytes it will never receive. If the header is unsupported or exceeds your complexity and size limits, return a normal full response only when that fallback is deliberate; otherwise return a clear client error.',
+				],
+				bullets: ['Accept only the `bytes` unit', 'Reject malformed and integer-overflowing values before filesystem access', 'Clamp valid end positions to the representation length', 'Limit range span and request frequency where bandwidth is costly', 'Return 416 with `Content-Range: bytes */TOTAL` when no range is satisfiable'],
+			},
+			{
+				heading: 'Build the 200 and 206 response contracts',
+				paragraphs: [
+					'For a full response, return 200, the complete Content-Length, the selected Content-Type, and `Accept-Ranges: bytes` when the endpoint supports ranges. For one valid range, return 206, Content-Length equal to `end - start + 1`, and `Content-Range: bytes START-END/TOTAL`. Content-Range belongs on 206 and 416 responses; it is not a substitute for Content-Length.',
+					'Use a strong representation validator such as an ETag or a stable last-modified value when clients may resume after a file changes. If you support If-Range, send the range only when its validator still matches; otherwise send the complete current representation. A partial response from an old version must never be combined with bytes from a new version.',
+				],
+				bullets: ['200: full body and total Content-Length', '206: selected body, selected Content-Length, and Content-Range', '416: no body or an intentional error body plus `bytes */TOTAL`', 'Set Content-Disposition deliberately for downloads', 'Keep ETag, Last-Modified, and If-Range semantics consistent with file replacement'],
+			},
+			{
+				heading: 'Stream only the requested bytes in Node.js',
+				paragraphs: [
+					'Once the range is normalized, pass its inclusive boundaries to Node’s `fs.createReadStream()` as `{ start, end }`. Pipe that stream to the response instead of reading the whole file into a Buffer. The stream’s end option is inclusive, which matches the HTTP range calculation. Handle file-open and stream errors before or during delivery, and stop work when the client disconnects.',
+					'A provider-neutral handler shape is: resolve metadata and authorization; parse Range; choose 200 or 206; set headers; create the bounded read stream; and attach cleanup and error handling. Re-stat or use an immutable object store contract when a file can be replaced between metadata lookup and streaming. If the size changes, abort rather than sending headers that describe bytes the stream cannot provide.',
+				],
+				bullets: ['`createReadStream(path, { start, end })` keeps memory bounded', 'Set headers before the first body bytes are emitted', 'Use backpressure through the framework’s response stream', 'Abort or destroy the stream on client disconnect', 'Keep file descriptors and temporary exports on a tested cleanup path'],
+			},
+			{
+				heading: 'Test resume, seek, errors, and intermediaries',
+				paragraphs: [
+					'Create a deterministic fixture and use curl or an HTTP client to request the first bytes, a middle slice, an open-ended range, and a suffix range. Assert the exact body, status, Content-Length, Content-Range, Content-Type, and validator. Download the file in two ranges and compare the reassembled bytes with the original. Then replace the file between requests and verify that your validator policy prevents mixing versions.',
+					'Exercise malformed headers, unsatisfiable ranges, huge spans, multiple ranges, HEAD, unauthorized files, missing files, client disconnects, slow consumers, compression, and the CDN or reverse proxy. Range offsets apply to the selected encoded byte sequence; automatic compression can make a byte-range contract confusing, so verify whether the proxy compresses, bypasses, or rewrites the response.',
+				],
+				bullets: ['Valid ranges return exactly the advertised bytes', 'Suffix and open-ended ranges work at file boundaries', 'Unsatisfiable ranges return 416 with the current total size', 'A stale validator does not produce a mixed-version download', 'Unauthorized and path-traversal attempts never open a file', 'HEAD and GET agree on metadata while HEAD sends no body', 'Proxy, CDN, compression, and origin behavior match the tested contract'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Range support improves resumability, but it does not automatically make downloads cheap. Enforce authentication and authorization, rate-limit abusive clients, cap concurrent streams, and observe bytes served, range size, open-file errors, disconnects, 206/200/416 rates, and storage latency. A download service may be better placed in object storage or a CDN when files are large and public; the application should then issue narrowly scoped access rather than proxying every byte.',
+					'Keep the implementation intentionally narrow until clients prove they need multipart ranges or dynamic transcoding. The useful contract is one where clients can resume safely, operators can explain every response, and a malformed Range header cannot turn into unbounded memory, disk, or bandwidth work.',
+				],
+				bullets: ['File identity and authorization are separate from byte-range parsing', 'Memory, bandwidth, concurrency, and file-descriptor limits are explicit', 'ETag or Last-Modified behavior prevents mixed representations', 'Range parsing has fuzz and boundary tests', 'Metrics distinguish client retries from origin and storage failures', 'A CDN/object-storage path is evaluated before scaling the app as a byte proxy', 'Runbooks cover revoked files, partial exports, stalled streams, and cleanup'],
+			},
+		],
+	},
+	{
 		slug: 'design-http-content-negotiation-api',
 		title: 'How to Use HTTP Content Negotiation Without Breaking API Clients',
 		seoTitle: 'HTTP Content Negotiation for APIs | PilotLab',

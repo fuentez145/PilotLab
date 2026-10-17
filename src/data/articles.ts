@@ -5345,4 +5345,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'use-fetchpriority-without-creating-a-priority-fight',
+		title: 'How to Use fetchpriority Without Creating a Priority Fight',
+		seoTitle: 'Use fetchpriority Without a Priority Fight | PilotLab',
+		dek: 'A measured guide to using the Fetch Priority API for the image, script, or stylesheet that matters most—without starving the resources your page actually needs.',
+		published: '2026-10-17',
+		updated: '2026-10-17',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to use fetchpriority for LCP images',
+		intro: 'fetchpriority is a small hint with a large temptation: mark the hero image high, mark everything else low, and hope the browser obeys. That is not a performance strategy. The useful approach is narrower—identify the resource that is late or mis-prioritized in a real loading trace, apply one hint, and verify that it improves the critical path without delaying CSS, fonts, or another page-critical request. This tutorial covers the HTML attribute, responsive images, preload interaction, browser limits, and a rollout test you can repeat.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — fetchpriority HTML attribute', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/fetchpriority' },
+			{ label: 'web.dev — Optimize resource loading with the Fetch Priority API', url: 'https://web.dev/articles/fetch-priority' },
+			{ label: 'WHATWG HTML Standard — Fetch priority attributes', url: 'https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fetch-priority-attributes' },
+			{ label: 'web.dev — Preload critical assets to improve loading speed', url: 'https://web.dev/articles/preload-critical-assets' },
+		],
+		sections: [
+			{
+				heading: 'Start with a resource waterfall, not a guess',
+				paragraphs: [
+					'Fetch priority changes the relative priority of a fetch; it does not make the resource smaller, remove a render-blocking dependency, or guarantee a particular request order. Before editing markup, capture a repeatable trace of the target route on a representative mobile profile. Identify the LCP candidate, when its request starts, what is competing for bandwidth, and whether the browser discovered the resource later than it should have.',
+					'Use the hint when browser inference is wrong or incomplete—for example, a hero image is visible immediately but competes with below-the-fold images, or a script needed for an early interaction is being treated as less important than it is. If the real bottleneck is server response time, image bytes, CSS, or a long main-thread task, fix that boundary instead of adding a priority attribute.',
+				],
+				bullets: ['Record URL, viewport, device class, cache state, and network profile', 'Find the actual LCP element and its request start time', 'Inspect request priority and competing resources in DevTools', 'Choose one hypothesis and one measurable outcome', 'Keep a baseline trace before changing markup'],
+			},
+			{
+				heading: 'Use high only for the current page’s true priority',
+				paragraphs: [
+					'The attribute accepts `high`, `low`, and `auto`; `auto` is the default. A typical LCP image can be marked as `<img src="/hero.avif" alt="..." fetchpriority="high" width="1280" height="720">`. The hint tells the browser this image matters more than it might infer, but it remains a hint and its effect is browser-dependent. Keep dimensions so the browser can reserve layout space, and keep the normal image source and responsive behavior intact.',
+					'Do not mark every image high. Several high-priority requests create a queue in which the browser still has to choose, while the extra traffic can delay the stylesheet, font, or image that actually controls the first view. Use `low` for a known non-critical resource only when you have evidence that it competes with the page’s important work; lazy loading and not rendering the resource yet may be the better fix.',
+				],
+				bullets: ['Use `high` for one or very few above-the-fold resources with a clear user impact', 'Use `low` sparingly for visible-but-secondary resources that compete with critical work', 'Leave most resources at `auto` so the browser can infer normal priority', 'Never use priority as a substitute for responsive sizing or compression', 'Treat the hint as progressive enhancement because older browsers may ignore it'],
+			},
+			{
+				heading: 'Keep responsive images and markup consistent',
+				paragraphs: [
+					'For a responsive image, put the hint on the image element that will select the source: `<img src="/hero-1280.avif" srcset="/hero-640.avif 640w, /hero-1280.avif 1280w" sizes="100vw" fetchpriority="high" ...>`. The selected URL, dimensions, format, and priority should describe the same image decision. Do not preload every candidate or hard-code a desktop asset that a small screen will never use.',
+					'If you preload an image discovered late by CSS or client code, make the preload’s `as`, URL, responsive attributes, and credentials mode match the eventual request. Fetch priority answers how a resource should be fetched once it is being fetched; preload changes when the browser discovers it. Adding both can be correct for a genuinely late critical image, but duplicating or mismatching them creates wasted work or warnings.',
+				],
+				bullets: ['Let `srcset` and `sizes` choose the right representation for the viewport', 'Keep width and height attributes or an equivalent aspect-ratio reservation', 'Preload only a resource the current document will definitely use', 'Match preload and final request attributes to avoid duplicate downloads', 'Do not preload alternate image candidates “just in case”'],
+			},
+			{
+				heading: 'Change one priority boundary at a time',
+				paragraphs: [
+					'Use a small experiment: keep the page, content, and network profile fixed; change one attribute; and repeat the trace enough times to see the direction rather than trusting one run. Compare LCP and its subparts, resource start time, total bytes, CSS and font timing, INP where JavaScript is involved, and console warnings. A faster image request that delays CSS is not an improvement.',
+					'Run the experiment through the production delivery path when possible. A CDN, compression, image optimizer, HTTP/2 or HTTP/3 connection, and cache state can change the competition. Field data matters because a lab device may not represent the browsers, networks, and page variants your users actually have. Treat any result as a hypothesis until real-user monitoring or a controlled release supports it.',
+				],
+				bullets: ['Compare control and treatment with the same route and content', 'Use cold and warm cache runs separately', 'Check LCP, request start, bytes, CSS, fonts, and main-thread work together', 'Test narrow mobile and desktop viewports', 'Watch field data after release before expanding the pattern'],
+			},
+			{
+				heading: 'Failure modes that make fetchpriority harmful',
+				paragraphs: [
+					'The most common failure is priority inflation: a team marks a carousel, every card image, analytics, and several scripts high because each is important to somebody. The browser cannot turn all of those requests into the first request. Another failure is using `fetchpriority="low"` to hide a resource that is actually needed for the first interaction; the hint may move the problem rather than solve it.',
+					'Also check for late discovery. If the LCP image is inserted only after hydration, priority cannot make it discoverable during the initial HTML parse. Render the important element in the initial response where appropriate, or fix the discovery path. Finally, do not claim a Core Web Vital improvement from a request-priority change without measuring the user-visible metric and checking for regressions in bandwidth, accessibility, layout stability, and interaction readiness.',
+				],
+				bullets: ['Too many `high` hints compete instead of creating useful order', 'A late-created element still starts late even when marked high', 'A low hint can delay an early interaction or above-the-fold content', 'A preload can waste bandwidth when the final candidate changes', 'Browser support and prioritization details differ, so keep a safe default'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'Keep fetchpriority close to the component or template that owns the page’s first-view decision, and review it when images, layout, scripts, or navigation change. Add a small performance test or trace to the route’s release checklist. The test should verify that the intended resource is requested, the markup remains valid, there is no duplicate fetch, and the measured trade-off is still positive on representative conditions.',
+					'Fetch Priority is not a universal scheduling API. WHATWG defines the values as relative signals, and MDN notes that the internal priority and its effect are browser-dependent. The right implementation is therefore conservative: preserve a good default, use a hint for a specific measured problem, and remove it when the page or browser makes the hint unnecessary.',
+				],
+				bullets: ['The LCP or early-interaction hypothesis is written down', 'Only the minimum number of resources receive non-default priority', 'Responsive image selection, dimensions, and accessibility remain correct', 'Preload is used only for late-discovered, definite current-page resources', 'Control and treatment traces show no critical-resource regression', 'Field monitoring covers LCP, INP, CLS, bytes, and error or warning rates', 'The team can remove the hint without changing product correctness', 'The performance owner reviews hints after template and asset changes'],
+			},
+		],
+	},
 ];

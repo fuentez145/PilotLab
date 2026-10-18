@@ -5414,4 +5414,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-bounded-concurrency-worker-pool-nodejs',
+		title: 'How to Build a Bounded-Concurrency Worker Pool in Node.js',
+		seoTitle: 'Bounded-Concurrency Worker Pool in Node.js | PilotLab',
+		dek: 'Process asynchronous work without overwhelming a database or API: cap active tasks, preserve failures, handle cancellation, and verify throughput instead of guessing at concurrency.',
+		published: '2026-10-18',
+		updated: '2026-10-18',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to build a bounded-concurrency worker pool in Node.js',
+		intro: 'Running every asynchronous task at once is an easy way to turn a burst of work into a second outage. A bounded-concurrency worker pool gives a Node.js service a deliberate number of active operations, keeps failures attributable to individual items, and creates a place for cancellation, backpressure, and retry policy. This tutorial describes a small provider-neutral pattern for API calls, file work, and queue consumers, while making clear where an in-process pool stops being enough.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Microsoft Learn — Competing Consumers pattern', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/competing-consumers' },
+			{ label: 'Microsoft Learn — Queue-Based Load Leveling pattern', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling' },
+			{ label: 'MDN — Promise.allSettled()', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled' },
+			{ label: 'Node.js Documentation — AbortSignal.timeout()', url: 'https://nodejs.org/api/globals.html#static-method-abortsignaltimeoutdelay' },
+		],
+		sections: [
+			{
+				heading: 'Choose the boundary before choosing the number',
+				paragraphs: [
+					'Use a pool when work arrives in a burst but the downstream system has a smaller safe capacity: importing records, calling a partner API, generating files, or consuming a bounded batch. The pool protects the dependency by limiting active work; it does not make the work durable or guarantee that every item runs exactly once.',
+					'Microsoft describes competing consumers as multiple workers reading from a shared queue so work can be processed concurrently, while queue-based load leveling uses a queue as a buffer between variable-rate producers and a service. An in-process pool is the smallest version of that idea. If the process can restart, the input is large, or work must wait for minutes, move the queue and progress state outside the process instead of stretching the pool into a job system.',
+				],
+				bullets: ['Name the unit of work and its maximum input size', 'Identify the database, API, filesystem, or CPU resource being protected', 'Decide whether ordering matters', 'Define whether partial success is allowed', 'Choose a durable queue when work must survive a process restart'],
+			},
+			{
+				heading: 'Implement a small pool with explicit active work',
+				paragraphs: [
+					'Keep the pool’s state visible: an input cursor, an active count, a results collection, and a stop signal. Start at most `concurrency` workers, and have each worker pull the next item only after the previous promise settles. This is different from mapping every item to a promise and passing the array to `Promise.all()`: the latter schedules all work immediately, even though it waits for all results.',
+					'For a batch whose results can be held in memory, a provider-neutral shape is enough. The worker should catch item-level failures and store them with the item’s stable identifier. If one failure should abort the whole batch, make that policy explicit and cancel or stop claiming new items; do not let an unhandled rejection decide the behavior accidentally.',
+				],
+				bullets: [
+					'const results: Array<{ id: string; ok: boolean; error?: unknown }> = [];',
+					'let next = 0;',
+					'async function worker() { while (next < items.length) { const item = items[next++]; try { await processItem(item); results.push({ id: item.id, ok: true }); } catch (error) { results.push({ id: item.id, ok: false, error }); } } }',
+					'await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));',
+					'Validate concurrency as a positive bounded integer and never let a caller choose an unbounded value',
+				],
+			},
+			{
+				heading: 'Make cancellation and failures part of the contract',
+				paragraphs: [
+					'Pass an AbortSignal to work that supports cancellation. Node.js provides `AbortSignal.timeout()` for a local deadline; combine it with a caller signal when the operation must stop on either condition. A pool can stop claiming new items after abort, but it cannot undo an external side effect that already completed. Report completed, failed, skipped, and in-flight work separately.',
+					'Use `Promise.allSettled()` when the caller needs every worker’s final outcome, including a worker that rejected unexpectedly. For item-level processing, catching inside the worker usually gives a more useful result because the item ID and error classification are still available. Keep errors bounded and safe: store a code and correlation ID rather than full request bodies or secrets.',
+				],
+				bullets: ['Caller cancellation stops new work and signals in-flight operations', 'Per-item timeout prevents one dependency call from occupying a worker forever', 'Transient failures are distinct from validation and authorization failures', 'Retries consume the same concurrency and total time budget', 'An external side effect gets an idempotency key or reconciliation path', 'A cancelled batch reports what finished instead of claiming rollback'],
+			},
+			{
+				heading: 'Tune throughput without moving overload downstream',
+				paragraphs: [
+					'Concurrency is not a performance constant. Start with a conservative value, measure dependency latency and error rate, then increase it only while the protected resource remains within its capacity and the user-visible operation improves. More concurrent requests can increase connection contention, rate-limit responses, database locks, memory use, and tail latency.',
+					'If several application instances each run a pool of ten, the dependency may receive far more than ten concurrent operations. Set a fleet-wide limit through the queue, gateway, or shared admission control when the dependency needs one. Microsoft warns that autoscaling consumers without bounding their aggregate downstream rate can simply move the overload to the next service.',
+				],
+				bullets: ['Measure active work, queue wait, item duration, dependency status, and memory', 'Treat per-instance concurrency multiplied by replicas as the real upper bound', 'Use separate pools for operations with different cost or failure behavior', 'Reserve capacity for interactive traffic instead of letting batch work take every slot', 'Apply backpressure when the input rate exceeds the safe consumer rate'],
+			},
+			{
+				heading: 'Verify the pool with a controllable dependency',
+				paragraphs: [
+					'Build a fake processor that records active calls, delays selected IDs, returns permanent failures, and fails transiently on a known attempt. Assert that active calls never exceed the configured limit, every item is accounted for once, one slow item does not prevent other workers from progressing, and the final result distinguishes success from failure. Test with fewer items than the worker count and with an empty input.',
+					'Then run a load test against the real dependency or a faithful local stand-in. Compare concurrency levels using the same input and observe throughput, p95 or p99 duration, error rate, rate-limit responses, database pool wait, and memory. Test cancellation during a slow call, process shutdown, a retry after a timeout, duplicate input IDs, and a worker exception outside the normal item handler.',
+				],
+				bullets: ['The active-call gauge never exceeds the configured bound', 'A failure in one item does not become an unhandled process rejection', 'Every accepted item ends in success, failure, or explicit cancellation state', 'Timeouts release a worker slot and do not leave work permanently active', 'Retries are bounded and do not exceed the dependency’s rate policy', 'Duplicate delivery is safe or rejected by an explicit idempotency rule', 'Metrics reveal queue wait separately from processing time'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'An in-process pool is useful for a request-scoped batch or a small scheduled task, but it disappears with the process. For durable background work, use a persistent queue, leases or visibility timeouts, idempotent consumers, dead-letter handling, and a status resource. A queue also changes the user contract: acceptance and completion become separate events that need progress and failure reporting.',
+					'Keep the pool deliberately boring. Expose current active work, waiting work, completed and failed counts, cancellation reason, retry count, and dependency labels. Tune from measurements, not from the number of cores or a benchmark that omits the real downstream. The useful limit is the one that keeps the whole workflow predictable when traffic, replicas, and dependency latency change.',
+				],
+				bullets: ['Concurrency has a documented owner and a safe runtime bound', 'The input is bounded or backed by a durable queue', 'Item processing is idempotent under retry and duplicate delivery', 'Abort, timeout, shutdown, and dependency failure paths are tested', 'Retry policy respects rate limits and the total operation deadline', 'Batch work cannot starve interactive requests', 'Dashboards show active work, wait time, failures, retries, and downstream saturation', 'The team knows when to replace the local pool with a durable worker system'],
+			},
+		],
+	},
 ];

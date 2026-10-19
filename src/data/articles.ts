@@ -21,6 +21,80 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'use-content-visibility-for-long-page-performance',
+		title: 'How to Use content-visibility for Long-Page Performance',
+		seoTitle: 'Use content-visibility for Long-Page Performance | PilotLab',
+		dek: 'Defer layout and paint work for offscreen sections without hiding accessible content—then verify the layout, interaction, and browser-support trade-offs before shipping.',
+		published: '2026-10-19',
+		updated: '2026-10-19',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to use content-visibility for long pages',
+		intro: 'Long pages often pay to lay out and paint content that nobody can see yet: article sections, dashboard panels, product cards, or a feed that grows over time. CSS `content-visibility: auto` gives the browser permission to skip rendering work for offscreen content while keeping that content in the document. It is a useful performance lever, not a magic “lazy load” switch. This tutorial shows where it fits, how to preserve scroll geometry with an intrinsic size, which interactive content needs care, and how to verify that the change improves the real page rather than merely changing a lab trace.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — content-visibility', url: 'https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/content-visibility' },
+			{ label: 'MDN — contain-intrinsic-size', url: 'https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/contain-intrinsic-size' },
+			{ label: 'web.dev — content-visibility', url: 'https://web.dev/articles/content-visibility' },
+			{ label: 'CSS Containment Module Level 2 — content-visibility', url: 'https://drafts.csswg.org/css-contain/#content-visibility' },
+		],
+		sections: [
+			{
+				heading: 'Identify the rendering work worth deferring',
+				paragraphs: [
+					'Use this technique when a page contains substantial below-the-fold sections that are part of the initial document but do not need to be laid out and painted immediately. Good candidates include long editorial pages, repeated feed items, large result lists, and dashboard panels whose content becomes relevant as the user scrolls. The browser can skip layout and paint for an offscreen element with `content-visibility: auto`, then render it when it becomes relevant to the user.',
+					'It is not a replacement for image loading, code splitting, server-side pagination, or removing unnecessary DOM. The HTML, styles, and data may still be downloaded and parsed. If the page is slow because of a large JavaScript bundle, a blocking font, an oversized hero image, or a slow server response, applying this property to a list will not fix that root cause. Profile first and choose a section whose rendering cost is real.',
+				],
+				bullets: ['Measure a long page with realistic content before changing CSS', 'Prefer self-contained sections with clear boundaries', 'Keep above-the-fold and immediately interactive UI visible', 'Do not use it to conceal content that should be available at first paint', 'Treat it as rendering deferral, not network or data deferral'],
+			},
+			{
+				heading: 'Apply content-visibility: auto to the section boundary',
+				paragraphs: [
+					'Apply the property to each repeated or independently meaningful block rather than to the entire page. The browser needs a boundary at which it can skip work. A class on article sections is often a better starting point than a wrapper around the whole document because the user can begin reading the first section while later sections remain deferred.',
+					'The `auto` value differs from `hidden`. MDN describes `auto` as enabling containment and skipping rendering when the element is not relevant to the user, while skipped content remains available to features such as find-in-page, tab navigation, and selection. `hidden` is closer to deliberately taking content out of rendering until your application changes the property. Choose `hidden` only when you own that visibility state and its accessibility consequences.',
+				],
+				bullets: [
+					".long-page-section { content-visibility: auto; }",
+					'.long-page-section { content-visibility: auto; contain-intrinsic-size: auto 720px; }',
+					'Use `auto` for browser-managed offscreen skipping; do not add JavaScript just to toggle it on scroll',
+					'Use a selector that will not accidentally include sticky headers, dialogs, or controls needed immediately',
+				],
+			},
+			{
+				heading: 'Reserve believable space to protect scroll geometry',
+				paragraphs: [
+					'Size containment can make an unrendered element behave as though it has no content unless you provide an intrinsic size. `contain-intrinsic-size` supplies a placeholder size for layout while the content is skipped. Without a reasonable estimate, sections may collapse and then expand as they render, moving the scrollbar and causing visible layout shifts when the user approaches them.',
+					'Choose the estimate from measured content, not a guess copied across every viewport. A fixed block size may be adequate for uniform cards; editorial sections with variable text need a more cautious estimate or a layout that tolerates variation. The `auto` form can remember the normally rendered size after it has been observed, while the fallback length covers the first skipped render. Re-test when fonts, copy, card width, or responsive breakpoints change.',
+				],
+				bullets: ['Start with a representative fallback such as `auto 720px`, then compare actual section heights', 'Use separate rules at responsive breakpoints when content height changes materially', 'Watch cumulative layout shift and scrollbar thumb movement', 'Do not use an arbitrary zero height for content users expect to scroll through', 'Keep reserved space stable when images or embeds load inside the section'],
+			},
+			{
+				heading: 'Audit interaction, focus, and measurement assumptions',
+				paragraphs: [
+					'An offscreen section can contain links, buttons, forms, or scripts. `auto` is intended to keep content available to browser features, but your own code may assume that every element has already been laid out. Audit code that calls `getBoundingClientRect()`, measures canvas or charts, observes sizes, calculates scroll positions, or initializes widgets on page load. Initialize a widget when its section becomes relevant, or make its initialization robust to a later layout pass.',
+					'Be especially careful with virtualized lists, sticky descendants, scroll-linked effects, and elements whose position is used to place an overlay. A section that is skipped can have a placeholder geometry rather than its final child geometry. Keyboard navigation and find-in-page are useful verification paths because they reveal whether the content remains reachable. Do not put a permanently focused control inside a section that your CSS or application later hides.',
+				],
+				bullets: ['Test keyboard tab order and focus indicators from the top of the page', 'Use find-in-page to reach text in a skipped section', 'Exercise deep links and browser back/forward scroll restoration', 'Recalculate charts, maps, and measured widgets after their section renders', 'Exclude sticky navigation, live regions, and always-visible status from the optimization'],
+			},
+			{
+				heading: 'Verify the change with before-and-after evidence',
+				paragraphs: [
+					'Create a repeatable test page with the same content, viewport, device emulation, network conditions, and browser version. Capture a baseline in the Performance panel or your normal lab tool, then compare main-thread rendering and layout work during load and early interaction. Look for a reduced amount of offscreen rendering work, but do not claim a win from one trace: repeat runs and check the page at several viewport sizes.',
+					'Test the user journey, not only the first screen. Scroll steadily and quickly through the entire page, open every control, select text, use find-in-page, reload at a deep URL, and resize the viewport. Confirm that sections appear before the user reaches them, images and embeds keep their intended dimensions, and no script throws when a previously skipped subtree becomes active. Measure real-user metrics after rollout where possible; a lab improvement is only useful if the shipped page remains responsive for your users.',
+				],
+				bullets: ['Baseline and candidate use the same content and test conditions', 'Initial layout and paint work are compared across repeated runs', 'Scroll-through has no blank sections, jumps, or delayed controls', 'Cumulative layout shift and interaction responsiveness are checked', 'Keyboard, find-in-page, deep links, and reduced-motion behavior still work', 'Older or unsupported browsers receive the ordinary layout as a safe fallback'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'MDN marks `content-visibility` as Baseline 2024, but a real audience may include older browsers or embedded webviews. The property is progressive enhancement: the default rendering remains the fallback when it is unsupported. Keep the unoptimized layout correct, and use feature detection only if application behavior genuinely depends on the optimization rather than its visual result.',
+					'The technique is most valuable when rendering—not downloading, parsing, or data fetching—is the bottleneck. Combine it with image dimensions and lazy loading, bounded result sets, sensible component boundaries, and a performance budget. Remove it if it makes layout calculations, accessibility behavior, or support work harder than the measured saving justifies. A smaller DOM or server-paginated response may be the better fix for a page that has outgrown a single document.',
+				],
+				bullets: ['The target sections and excluded interactive regions are documented', 'Intrinsic-size estimates are based on measured responsive content', 'CLS, scrolling, focus, and widget initialization have regression tests', 'Unsupported browsers retain a correct non-optimized experience', 'Performance traces and real-user signals are compared after deployment', 'The team has a rollback path and knows when to remove the rule', 'The optimization complements, rather than hides, network and JavaScript problems'],
+			},
+		],
+	},
+	{
 		slug: 'serve-large-file-downloads-with-http-range-requests',
 		title: 'How to Serve Large File Downloads with HTTP Range Requests',
 		seoTitle: 'Serve Large Downloads with HTTP Range Requests | PilotLab',

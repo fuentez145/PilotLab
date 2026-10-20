@@ -5563,4 +5563,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'evaluate-rag-retrieval-before-changing-models',
+		title: 'How to Evaluate RAG Retrieval Before Changing Models',
+		seoTitle: 'Evaluate RAG Retrieval Before Changing Models | PilotLab',
+		dek: 'A practical retrieval evaluation loop for AI product teams: build a labeled query set, measure context quality separately from answer quality, and fix the failing layer before spending on a larger model.',
+		published: '2026-10-20',
+		updated: '2026-10-20',
+		readTime: '10 min read',
+		category: 'AI engineering',
+		keyword: 'how to evaluate RAG retrieval before changing models',
+		intro: 'When a retrieval-augmented generation feature gives a wrong answer, teams often change the model first. That can be an expensive way to treat the symptom: the retriever may have returned the wrong document, the right document may have been truncated, or the answer may have ignored evidence that was present. Evaluate retrieval as its own boundary before changing the generator. This tutorial shows how to create a small labeled query set, measure recall and ranking, inspect grounded answers, and turn failures into release gates without pretending that one score represents product quality.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'Microsoft Learn — Built-in evaluators reference', url: 'https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/evaluation-metrics-built-in' },
+			{ label: 'OpenAI API — Working with evals', url: 'https://platform.openai.com/docs/guides/evals' },
+			{ label: 'NIST — AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' },
+			{ label: 'NIST — Generative AI Profile', url: 'https://doi.org/10.6028/NIST.AI.600-1' },
+		],
+		sections: [
+			{
+				heading: 'Define the retrieval decision before measuring it',
+				paragraphs: [
+					'RAG retrieval is not simply “find similar text.” It is a product boundary that supplies evidence for a user decision. Start with one workflow—answering questions over support documentation, finding policy clauses, or summarizing internal procedures—and define what a useful retrieved set contains. A result can be semantically related yet still omit the paragraph that proves the answer or expose a document the user is not allowed to see.',
+					'Write the contract for both retrieval and generation. Retrieval should return permitted, relevant chunks with enough context and stable source identifiers. Generation should answer from those chunks, cite or expose the evidence your user needs, and abstain when the evidence is missing. Microsoft’s evaluator guidance treats retrieval, groundedness, relevance, and safety as distinct concerns; keeping them separate makes a failure actionable instead of turning it into a vague model-quality score.',
+				],
+				bullets: ['Name the user question and the decision it supports', 'Define the document and chunk that count as relevant evidence', 'Specify tenant, role, and document-level access rules', 'Decide whether the correct behavior is an answer, clarification, or abstention', 'Set separate budgets for retrieval latency, generation latency, and cost'],
+			},
+			{
+				heading: 'Build a small labeled query set',
+				paragraphs: [
+					'Create cases from real-shaped questions, with confidential values removed or replaced. Each case should have a stable ID, the authorized user context, the query, the expected source documents or passages, and the expected answer behavior. Store acceptable evidence rather than only one ideal wording: a policy answer may be correct when it cites either of two current sections, while a request for information that is absent should be marked as an intentional abstention.',
+					'Include cases that expose the boundaries of the system: exact product names, synonyms, acronyms, typos, questions spanning two documents, conflicting versions, long documents, empty results, and adversarial text inside a retrieved document. Keep a private test split and version changes to the labels. If the corpus or permissions change, record that as part of the evaluation configuration rather than silently comparing results against a moving target.',
+				],
+				bullets: ['Start with a focused set that a domain owner can review case by case', 'Tag questions by difficulty, risk, language, source type, and expected action', 'Record one or more acceptable evidence IDs and the required facts', 'Include unanswerable and unauthorized questions', 'Keep test labels separate from prompts, chunking code, and model configuration'],
+			},
+			{
+				heading: 'Measure retrieval before generation',
+				paragraphs: [
+					'Run the query set through the retriever alone and save the ranked IDs, scores, filters, chunk text or a protected reference, latency, and configuration. Measure whether an acceptable evidence item appears in the top k results. Recall@k answers “did we retrieve at least one relevant item?”; precision@k asks how much of the returned set is relevant. Mean reciprocal rank can show whether the first relevant item is near the top, but none of these measures understands the business cost of a permission leak or a missing critical clause.',
+					'Calculate results by risk tag and query type, not only as one average. A retriever can improve its overall recall by returning many broad chunks while becoming worse for the high-risk policy questions that matter most. Inspect false negatives and false positives. If the right document is missing, investigate query rewriting, filters, metadata, embedding coverage, and indexing. If it is present at rank 20, investigate chunk boundaries, hybrid retrieval, reranking, and the context limit before changing the generator.',
+				],
+				bullets: ['Save top-k results and the exact retrieval configuration for each run', 'Report recall@k, precision@k, and rank of the first acceptable evidence where useful', 'Separate authorization filtering from relevance scoring and test both', 'Break down results by risk, language, document type, and query shape', 'Inspect individual misses before choosing an embedding or model change'],
+			},
+			{
+				heading: 'Evaluate the answer against the retrieved evidence',
+				paragraphs: [
+					'Good retrieval does not guarantee a good answer. Run the same retrieved contexts through the generator and check whether the response uses the evidence, answers the question, includes required facts, and avoids unsupported claims. Microsoft lists groundedness and relevance separately for RAG evaluation; use deterministic checks for structure and required citations, then use a reviewed rubric or model-based judge for qualities that cannot be reduced to string matching.',
+					'Keep the retrieval and generation artifacts together. For every failure, ask which layer broke: the evidence was absent, the evidence was present but not passed to the prompt, the model misread a conflict, the response omitted a required fact, or the application failed to enforce an access rule. A groundedness judge is an instrument, not an authority. Calibrate it against human-reviewed examples and keep safety and authorization failures as release-blocking checks rather than averaging them away.',
+				],
+				bullets: ['Context recall: was the necessary evidence retrieved?', 'Context precision: did the top results contain mostly useful evidence?', 'Groundedness: can important claims be supported by the supplied context?', 'Answer relevance and completeness: did it address the user’s actual task?', 'Safety and access: did it avoid restricted sources, prompt injection, and invented certainty?'],
+			},
+			{
+				heading: 'Compare changes with a controlled experiment',
+				paragraphs: [
+					'Compare one change at a time against a recorded baseline: chunk size, overlap, metadata filters, embedding model, hybrid search, reranker, context budget, prompt, or generator. Use the identical query set, corpus snapshot, authorization context, and evaluation code. Store per-case outputs, retrieved IDs, scores, latency, token usage, and cost. OpenAI’s eval guidance emphasizes running across more than one prompt, model, and data set as a small sample is not enough to establish robust behavior.',
+					'Define gates before looking at the results. A candidate might need no critical access failures, no regression on protected questions, a minimum retrieval recall for high-risk tags, and an acceptable latency or cost change. Do not call a change better because its aggregate score rose if it made unanswerable questions sound more confident. Read every critical failure and record whether the right fix belongs in ingestion, retrieval, prompting, authorization, or the product fallback.',
+				],
+				bullets: ['Pin the corpus, labels, permissions, prompt, and model versions', 'Change one major retrieval or generation variable per comparison', 'Review high-risk regressions even when the average improves', 'Keep a small regression set in CI and run a broader set before releases', 'Record latency, token use, cost, abstention, and citation behavior with quality'],
+			},
+			{
+				heading: 'Production checklist and failure modes',
+				paragraphs: [
+					'A RAG evaluation set is a controlled sample, not proof that a system is safe in production. Documents change, permissions drift, user questions move outside the training examples, and retrieved text can contain instructions intended to manipulate the model. NIST’s AI RMF frames evaluation as part of managing trustworthiness across the system lifecycle. Keep live feedback, correction review, access monitoring, and incident response alongside the offline test.',
+					'Watch for retrieval metrics that improve by returning too much context, answer metrics that reward confident unsupported prose, and test cases that become stale after a content migration. Log references and bounded metadata rather than sensitive document text. When evidence is missing or conflicting, make abstention and escalation a first-class result. The useful system is not the one that always answers; it is the one that can explain which evidence it used and stop when that evidence is not enough.',
+				],
+				bullets: ['Corpus snapshots, labels, prompts, models, and evaluators are versioned', 'Permission filters are tested before relevance ranking and again in the answer path', 'Critical access, safety, and unsupported-claim failures block release', 'A retrieval miss cannot silently become a confident answer', 'Chunking, indexing, reranking, and context limits have observable versions', 'Live corrections can create reviewed regression cases without retaining unnecessary personal data', 'Latency, cost, abstentions, citations, and user corrections are monitored', 'Runbooks explain reindexing, stale documents, permission changes, rollback, and human escalation'],
+			},
+		],
+	},
 ];

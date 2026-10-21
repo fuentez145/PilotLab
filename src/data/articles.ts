@@ -5632,4 +5632,83 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-stale-while-revalidate-cache-service-worker',
+		title: 'How to Build a Stale-While-Revalidate Cache with a Service Worker',
+		seoTitle: 'Build a Stale-While-Revalidate Service Worker Cache | PilotLab',
+		dek: 'Serve repeatable read-only data quickly while refreshing it in the background—without caching private responses, hiding failures, or trapping users on an old app shell.',
+		published: '2026-10-21',
+		updated: '2026-10-21',
+		readTime: '10 min read',
+		category: 'Web applications',
+		keyword: 'how to build a stale-while-revalidate cache with a service worker',
+		intro: 'A service worker can make a read-heavy web app feel immediate on repeat visits: return a known response now, then refresh the cache so the next request sees newer data. That stale-while-revalidate pattern is useful for product catalogs, public content, and non-critical dashboards, but it is also easy to apply to the wrong data. The Cache API does not enforce HTTP freshness headers or expiration for you, so correctness depends on explicit route selection, cache versioning, response validation, privacy boundaries, and a user-visible way to recover from stale or failed data.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'MDN — Cache API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Cache' },
+			{ label: 'MDN — Using Service Workers', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers' },
+			{ label: 'MDN — CacheStorage', url: 'https://developer.mozilla.org/en-US/docs/Web/API/CacheStorage' },
+			{ label: 'web.dev — Service worker caching and HTTP caching', url: 'https://web.dev/articles/service-worker-caching-and-http-caching' },
+		],
+		sections: [
+			{
+				heading: 'Choose data that can safely be briefly stale',
+				paragraphs: [
+					'Stale-while-revalidate means the first response can be old while a network request updates the stored copy. That is a product decision, not merely a browser optimization. It fits public article data, a product list whose price and availability are checked again before purchase, or a dashboard where a last-known snapshot is more useful than a blank screen. It does not fit account balances, permissions, checkout totals, one-time tokens, or any response where serving old data could authorize an action.',
+					'Define the freshness promise per route. A cache entry may be acceptable for a minute, a session, or only as an offline fallback. The Cache API stores Request/Response pairs and does not automatically expire entries or honor HTTP caching headers, so the service worker must implement the policy or defer to the browser network cache deliberately. Keep the network as the authority for sensitive and mutation paths.',
+				],
+				bullets: ['Allow only explicit GET routes with read-only semantics', 'Exclude personalized, permission-sensitive, and transactional responses by default', 'Document the maximum tolerated staleness and the fallback when refresh fails', 'Re-check current data before any side effect such as checkout or save', 'Keep cache keys free of secrets and unexpected user-controlled variants'],
+			},
+			{
+				heading: 'Register and version the service worker carefully',
+				paragraphs: [
+					'Service workers require a secure context; HTTPS is the production requirement and localhost is suitable for development. Register from the page only after deciding the scope. The worker is installed and activated separately from the page, and an already open document may need a reload before it is controlled. Treat that lifecycle as part of the rollout rather than assuming that registration changes the current page immediately.',
+					'Use a versioned cache name such as `read-api-v3`. During activation, delete cache names that the current worker no longer owns. MDN describes the activation phase as the place to clean old resources, and versioning prevents a new script from interpreting entries written by an incompatible schema. Be cautious with `skipWaiting()` and `clients.claim()`: taking control immediately can mix a new worker with an old page unless the application contract is compatible.',
+				],
+				bullets: [
+					"const CACHE_NAME = 'read-api-v3';",
+					"self.addEventListener('activate', (event) => { event.waitUntil(caches.keys().then((names) => Promise.all(names.filter((name) => name.startsWith('read-api-') && name !== CACHE_NAME).map((name) => caches.delete(name))))); });",
+					'Keep install focused on assets that must exist for the shell; do not make a transient API response a reason for the entire worker installation to fail',
+				],
+			},
+			{
+				heading: 'Implement the read path with a bounded refresh',
+				paragraphs: [
+					'Intercept only requests that match an explicit same-origin route and method. Look up the cached response first. If it exists, return it immediately and start a refresh in the background; if it does not exist, wait for the network and cache only a successful response. In a fetch event, use `event.respondWith()` for the response and `event.waitUntil()` for background work so the worker can finish the cache write without delaying the user’s cached response.',
+					'Never cache every response just because it returned HTTP 200. Check the URL, method, response status, content type, and authentication context. Clone a response before consuming or storing it because response bodies are streams. A provider-neutral shape looks like this:',
+				],
+				bullets: [
+					"const isRead = event.request.method === 'GET' && new URL(event.request.url).pathname === '/api/catalog';",
+					"const cache = await caches.open(CACHE_NAME); const cached = await cache.match(event.request);",
+					"const refresh = fetch(event.request).then((response) => { if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('uncacheable response'); return cache.put(event.request, response.clone()).then(() => response); });",
+					"event.respondWith(cached ?? refresh); if (cached) event.waitUntil(refresh.catch(() => undefined));",
+					'Add a timeout or cancellation policy to refresh work when the request can otherwise keep worker resources busy; a cached response should not depend on a refresh succeeding',
+				],
+			},
+			{
+				heading: 'Keep freshness and privacy boundaries explicit',
+				paragraphs: [
+					'The service worker cache is separate from the ordinary HTTP cache. A response may pass through both layers, and the service worker can return its copy without giving the browser an opportunity to revalidate with the origin. Decide whether the worker owns freshness for this route or whether it should use a network-first path that lets HTTP validators do their job. Do not stack two uncoordinated expiration systems and then claim that a cached item is current.',
+					'Be strict about authenticated data. A cache match is not an authorization check, and a URL that looks public may still vary by cookie, Authorization header, tenant, locale, or experiment. The safest default is to bypass the service-worker cache when credentials or a private response are involved. If an authenticated offline view is genuinely required, bind storage and invalidation to the account and threat model, and test logout and account switching as security events.',
+				],
+				bullets: ['Do not cache responses containing account or tenant data without a reviewed isolation design', 'Treat cookies, Authorization, Vary, and content negotiation as cache-key inputs', 'Never cache Set-Cookie-dependent or token-bearing responses as ordinary shared entries', 'Invalidate or bypass cached data after logout and account changes', 'Display a last-updated time when stale data could change a user decision'],
+			},
+			{
+				heading: 'Handle quota, offline, and update failures',
+				paragraphs: [
+					'Cache storage is persistent but not permanent. Browsers impose origin quotas and may delete an origin’s stored data, while private browsing and unsupported contexts can behave differently. Keep entries bounded by route and count, delete old versions during activation, and avoid caching unbounded query variants. If `cache.put()` fails, the network response can still be returned; caching is an enhancement, not a reason to break the read path.',
+					'An offline fallback should be honest. If no cached response exists, return a controlled error or an application shell that says the data is unavailable. If a refresh fails after a stale response was shown, keep the stale response but expose its age and let the user retry. Do not replace an existing good entry with an error response, an HTML login page, or a partial JSON payload.',
+				],
+				bullets: ['Bound cache size, query variants, and retention explicitly', 'Delete old cache versions after the new worker activates', 'Treat quota errors and origin eviction as normal recoverable conditions', 'Never overwrite valid data with an error or login response', 'Provide a retry and an offline explanation when no cached copy exists'],
+			},
+			{
+				heading: 'Verify the behavior through the real deployment path',
+				paragraphs: [
+					'Test the worker with a deterministic endpoint and browser storage you can clear. First load with the network available and assert that the response is stored. On the second request, delay the network and verify that the cached response arrives before the refresh completes; then change the origin response and verify that a later request receives the new value. Test a first visit while offline, a failed refresh, a non-2xx response, malformed content type, a cache miss, and a worker update with old pages still open.',
+					'Inspect DevTools Application and Network panels, but also test the public HTTPS route behind the CDN or reverse proxy. Confirm that headers, cookies, authentication, redirects, and cache-control behavior match the intended policy. Test logout, account switching, locale changes, query parameters, browser back/forward, private browsing, quota pressure, and a service-worker unregister or rollback path. A local passing test does not prove that a deployed worker has the right scope or that old caches were removed.',
+				],
+				bullets: ['Cold, warm, offline, and failed-refresh journeys have assertions', 'Stale content is visibly identified when freshness matters', 'Only allowlisted GET responses enter the cache', 'A 401, redirect, HTML error, or malformed body is never stored as API data', 'Worker version changes remove incompatible entries without trapping old pages', 'Logout and account switching cannot reveal the previous user’s data', 'Public proxy, HTTPS, headers, and scope are tested end to end'],
+			},
+		],
+	},
 ];

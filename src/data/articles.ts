@@ -21,6 +21,93 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'build-resumable-browser-uploads-tus',
+		title: 'How to Build Resumable Browser Uploads with tus',
+		seoTitle: 'Build Resumable Browser Uploads with tus | PilotLab',
+		dek: 'A practical design for large browser uploads: create an upload resource, resume from a server-owned offset, verify bytes, and clean up abandoned work without trusting the client.',
+		published: '2026-10-22',
+		updated: '2026-10-22',
+		readTime: '10 min read',
+		category: 'API engineering',
+		keyword: 'how to build resumable browser uploads with tus',
+		intro: 'A large upload should not restart from byte zero because a mobile connection dipped or a laptop woke from sleep. Resumable uploads separate the transfer into a durable upload resource: the browser sends chunks, the server reports the committed offset, and the client continues from that offset after an interruption. This tutorial uses the tus protocol as the wire contract, with a provider-neutral application layer for authorization, storage, scanning, and completion.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'tus — Resumable Upload Protocol 1.0.x', url: 'https://tus.io/protocols/resumable-upload' },
+			{ label: 'MDN — Blob.slice()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Blob/slice' },
+			{ label: 'AWS — Multipart upload overview', url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Choose the upload contract before the storage API',
+				paragraphs: [
+					'Use resumability when the file is large enough that a failed transfer is expensive, the network is unreliable, or the browser must pause and continue later. The tus protocol defines an upload resource that can be inspected with `HEAD` and advanced with `PATCH`. Its core contract uses `Upload-Offset` to report the number of bytes already committed and `Upload-Length` to describe the complete object when the size is known.',
+					'You still need an application contract around that protocol. Decide who may create an upload, which tenant and record it belongs to, the maximum size, allowed media types, retention, whether the upload can be paused, and what “complete” means. A transport-level offset does not mean the file is trusted or ready for other users. Keep uploaded bytes private until validation and scanning finish.',
+				],
+				bullets: ['Authenticate before creating or inspecting an upload resource', 'Bind the upload to a server-owned tenant and resource ID', 'Set a maximum total size and a limit for abandoned uploads', 'Choose whether the final size is required at creation time', 'Keep storage state separate from business publication state'],
+			},
+			{
+				heading: 'Create one upload resource and return its URL',
+				paragraphs: [
+					'The browser should first call an authenticated creation endpoint with metadata such as the intended filename, size, and media type. Validate and normalize that metadata, generate an opaque upload ID, persist the owner and policy, and return a URL that the client can use for the tus requests. Do not construct storage paths by concatenating the filename or any other browser-supplied value.',
+					'Include the protocol version in requests and responses. The tus specification requires `Tus-Resumable` on requests and responses other than `OPTIONS`, and servers advertise supported extensions with `Tus-Extension`. If your implementation supports expiration, checksums, or termination, document those extensions explicitly rather than making clients infer them from a failed request.',
+				],
+				bullets: [
+					"POST /uploads with `Tus-Resumable: 1.0.0` and `Upload-Length: 524288000`",
+					'Return 201 Created with an opaque Location such as `/uploads/u_7f…`',
+					'Persist owner, expected length, received offset, policy, and status atomically',
+					'Keep original filenames as display metadata, not filesystem or object keys',
+					'Never give the browser storage credentials that can access another upload'],
+			},
+			{
+				heading: 'Upload chunks from the browser and resume by offset',
+				paragraphs: [
+					'Use `Blob.slice(start, end)` to create each chunk. MDN specifies that the start is inclusive and the end is exclusive, which makes the next offset calculation straightforward. Send the slice as `application/offset+octet-stream` with the current `Upload-Offset`. On success, the server returns 204 and the new offset; the client should treat that response as the only authority for where to continue.',
+					'When a request fails or the browser restarts, issue `HEAD` against the upload URL and read the server’s `Upload-Offset`. Do not calculate the resume point only from locally completed promises: a connection can fail after the server commits bytes but before the browser receives the response. If the client’s proposed offset differs from the server’s committed offset, stop and reconcile instead of appending at a guessed position.',
+				],
+				bullets: [
+					'Choose a bounded chunk size from measured memory, proxy, and storage behavior',
+					'Keep at most a small number of chunks in flight per upload',
+					'Advance local progress only after the server confirms the new offset',
+					'Use `HEAD` after interruption, tab restoration, or an offset conflict',
+					'Pause on cancellation without deleting the upload unless the user chose delete'],
+			},
+			{
+				heading: 'Make byte integrity and concurrency explicit',
+				paragraphs: [
+					'An offset proves how many bytes the server accepted; it does not prove that the bytes are the intended file. Use the tus checksum extension or a storage checksum when the integrity requirement justifies it. At completion, compare the received length with the declared length, verify the final digest if one is part of the contract, and record the result before making the file available.',
+					'Serialize updates to one upload resource. Two browser tabs, a retry that arrives late, or an overly aggressive parallel client can otherwise write different chunks at the same offset. Either require strictly sequential PATCH requests or implement a server-side compare-and-advance operation with a clear conflict response. Parallel multipart storage can improve throughput, but it needs a part-number contract and a final ordered assembly; it is not the same as allowing concurrent writes to one byte stream.',
+				],
+				bullets: ['Reject an `Upload-Offset` that is not the server’s current offset', 'Use a lock, transaction, or conditional update around offset advancement', 'Bound chunk size, total size, and request duration independently', 'Verify the final byte count before transitioning to uploaded', 'Scan or transform asynchronously before publishing the file'],
+			},
+			{
+				heading: 'Handle expiration, retries, and storage failures',
+				paragraphs: [
+					'Resumability makes unfinished state durable, so it also creates cleanup work. Store an expiration time and run a bounded cleanup process that removes abandoned upload resources and temporary objects. If an upload is intentionally cancelled, mark it terminated before deleting storage so a racing request cannot publish it after the user has moved on. AWS describes the same operational concern for multipart uploads: incomplete work needs an explicit completion or abort path.',
+					'Retry only the chunk that failed, and retry within an overall upload deadline. A timeout leaves the outcome ambiguous, so query the offset before sending the same bytes again. If the storage provider committed a part but your metadata update failed, reconcile provider state rather than blindly appending or declaring success. Keep the upload status machine small: created, uploading, verifying, ready, rejected, expired, and terminated are usually enough.',
+				],
+				bullets: ['Return a clear conflict when the upload is expired or terminated', 'Use bounded retries with backoff for transient storage and network errors', 'Reconcile metadata and object storage after partial failures', 'Delete incomplete uploads on a schedule and measure cleanup lag', 'Never expose a temporary object through the normal download route'],
+			},
+			{
+				heading: 'Verify the complete path before production',
+				paragraphs: [
+					'Test the protocol with a deterministic fixture and a real HTTP listener. Create an upload, send two chunks, interrupt the connection, ask for `HEAD`, resume from the returned offset, and verify the final bytes against the original file. Test a retry after the server committed a chunk but before the response reached the client; the result should be one correct file, not duplicated bytes or a false success.',
+					'Then test the boundaries that a local happy path hides: two tabs using one upload, a wrong offset, a changed declared length, an oversized chunk, a malformed header, an expired URL, an unauthorized tenant, a storage timeout, a scanner rejection, a process restart, and a reverse proxy with its real body and timeout limits. Browser tests should cover pause, reload, sleep/wake, cancellation, progress, and a network change. Inspect the public delivery path rather than assuming localhost has the same limits.',
+				],
+				bullets: ['The assembled bytes match the source file exactly', 'A reconnect resumes from server state without duplicate bytes', 'Concurrent or stale PATCH requests cannot corrupt the object', 'Authorization is enforced on create, HEAD, PATCH, and completion', 'Rejected and expired uploads are inaccessible and eventually deleted', 'Metrics cover active uploads, bytes, retries, conflicts, duration, and cleanup', 'The production proxy accepts the protocol headers and intended chunk size'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'tus is a useful standard boundary when you want resumability without tying the browser to one object-storage vendor. A managed storage multipart API may be the better choice when the provider can issue narrowly scoped upload permissions, assemble parts, calculate checksums, and clean up incomplete work. In either design, the application still owns authorization, tenant binding, file policy, scanning, publication, and the recovery path.',
+					'Do not claim that resumable uploads are automatically faster. Smaller chunks improve recovery but increase request overhead; larger chunks reduce overhead but repeat more work after a failure. Start sequentially, measure real networks, and add bounded parallelism only when storage ordering, checksums, progress, and cancellation are all tested. The reliable upload is the one that can explain its current offset, trust state, owner, and next safe action.',
+				],
+				bullets: ['The protocol version and supported extensions are documented', 'Upload URLs are opaque, authorized, expiring, and not reusable across tenants', 'Offsets are server-owned and updated atomically', 'Integrity, scanning, publication, and download authorization are separate states', 'Retries and reconciliation cannot duplicate or silently lose bytes', 'Abandoned temporary state has a bounded retention and cleanup job', 'Limits and metrics protect application, proxy, storage, and scanner capacity', 'A vendor multipart path is evaluated before building more protocol surface'],
+			},
+		],
+	},
+	{
 		slug: 'use-content-visibility-for-long-page-performance',
 		title: 'How to Use content-visibility for Long-Page Performance',
 		seoTitle: 'Use content-visibility for Long-Page Performance | PilotLab',

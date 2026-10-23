@@ -5720,6 +5720,75 @@ export const articles: Article[] = [
 		],
 	},
 	{
+		slug: 'build-reliable-webhook-delivery-queue',
+		title: 'How to Build a Reliable Webhook Delivery Queue',
+		seoTitle: 'Build a Reliable Webhook Delivery Queue | PilotLab',
+		dek: 'Design webhook delivery as durable, retryable work: authenticate once, acknowledge quickly, apply backoff, prevent duplicates, and give operators a safe replay path.',
+		published: '2026-10-23',
+		updated: '2026-10-23',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to build a reliable webhook delivery queue',
+		intro: 'A webhook endpoint is easy to demonstrate and surprisingly easy to lose in production. A receiver can be temporarily unavailable, a network can fail after the request was accepted, and a retry can arrive while the first attempt is still running. Treat delivery as a durable workflow instead of a single HTTP call: authenticate the event, record the delivery, let a worker attempt it, and make every outcome visible. This tutorial describes a provider-neutral design for small product teams, with the queue semantics, backoff, idempotency, and operational controls that make retries safe.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Stripe — Receive events in your webhook endpoint', url: 'https://docs.stripe.com/webhooks' },
+			{ label: 'AWS — Amazon SQS visibility timeout', url: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html' },
+			{ label: 'AWS Prescriptive Guidance — Retry pattern', url: 'https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/retry.html' },
+			{ label: 'IETF RFC 9110 — 202 Accepted', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-202-accepted' },
+		],
+		sections: [
+			{
+				heading: 'Define the delivery contract before choosing a queue',
+				paragraphs: [
+					'You need a source event, a destination endpoint, and a durable delivery record. The record should identify the event, destination, payload version, attempt count, next attempt time, current status, and last failure. Keep the event body or a protected reference to it available for retries; do not make the original request the only copy of data a failed delivery needs.',
+					'Decide what the sender promises. Most webhook systems provide at-least-once delivery: the destination may receive the same event more than once, and ordering may not be guaranteed across event types. Stripe documents automatic retries, duplicate handling, asynchronous processing, and the need to return a quick 2xx response as separate receiver concerns. Your contract should say the same things plainly instead of implying exactly-once delivery.',
+				],
+				bullets: ['Give every event and destination a stable identifier', 'Declare whether delivery is at-least-once and whether ordering is best-effort', 'Set a retention period and a maximum attempt policy', 'Define which failures are retryable, permanent, or sent to a dead-letter state', 'Keep payload schemas versioned and include an event type and creation time'],
+			},
+			{
+				heading: 'Accept the event durably, then deliver asynchronously',
+				paragraphs: [
+					'The ingress path should authenticate the sender, validate the envelope, persist the event or delivery command, and return a success response only after the durable write is complete. HTTP 202 means the request has been accepted for processing and does not claim that the destination has already received the event. If the database write succeeds but the queue publish fails, use a transactional outbox or a reconciliation process so the accepted record cannot disappear between those two operations.',
+					'Keep the ingress handler short. It should not wait for a slow customer endpoint, run a large business workflow, or retry a destination inline. If the provider signs the raw body, verify the signature against the exact bytes before parsing or transforming them, enforce a timestamp or replay policy where the provider supports one, and never log the signing secret or full payload by default.',
+				],
+				bullets: ['Verify signature and timestamp before trusting event fields', 'Persist the accepted event and delivery target before acknowledging', 'Return a stable 2xx or 202 only after the durable boundary', 'Publish through an outbox when database and queue cannot commit atomically', 'Use a bounded request-body and processing-time limit on the ingress route'],
+			},
+			{
+				heading: 'Model attempts so retries cannot become a storm',
+				paragraphs: [
+					'A worker claims a delivery, sends the request, classifies the result, and either marks it delivered or schedules another attempt. Use exponential backoff with jitter and a maximum delay. AWS describes retry as a pattern that must consider transient versus permanent failures and warns that unbounded retries can amplify an outage. A retry is useful only when it protects both your system and the destination from synchronized repeated work.',
+					'Keep the delivery lease longer than the normal request deadline but shorter than the maximum time you are willing to wait before recovery. Queue systems that hide a message while it is being processed can redeliver it when the visibility timeout expires; AWS documents this behavior and recommends extending or choosing the timeout to match processing. Therefore, a worker must tolerate duplicate claims even when the queue appears to offer one active consumer.',
+				],
+				bullets: ['Retry network failures, timeouts, and selected 5xx responses according to policy', 'Do not retry invalid signatures, unsupported payload versions, or most 4xx responses blindly', 'Add jitter so many deliveries do not retry at the same instant', 'Bound attempts, total retention, request duration, and payload size separately', 'Extend a lease for slow work or make the handler safe when the message reappears'],
+			},
+			{
+				heading: 'Make duplicate delivery safe at both ends',
+				paragraphs: [
+					'An outbound request can reach the destination even when your worker times out before reading its response. Marking that attempt as failed and sending it again may create two side effects. Include a stable event or delivery ID in a documented header and require consumers to store processed IDs before applying their side effect. That consumer-side check is part of the webhook contract; a sender cannot guarantee deduplication from its own database alone.',
+					'On the sender, protect the delivery record with a unique key such as destination ID plus event ID. Claim work with an atomic state transition or lease, and make the transition to delivered conditional on the attempt that actually ran. Do not delete evidence after success if support needs to explain a delivery; retain safe metadata and a redacted response summary according to your data policy.',
+				],
+				bullets: ['Send an opaque idempotency or event ID that remains stable across retries', 'Use a unique constraint to prevent duplicate delivery records', 'Claim and complete attempts with compare-and-set or a lease token', 'Tell consumers to deduplicate before irreversible side effects', 'Treat timeout-after-send as an unknown outcome, not proof of absence'],
+			},
+			{
+				heading: 'Separate destination health from payload correctness',
+				paragraphs: [
+					'Not every failure wants the same recovery. A connection reset may be transient; a 401 may require rotating credentials; a 410 may mean the endpoint should be disabled; a 400 caused by a schema bug should go to an operator rather than retrying for days. Record the HTTP status, bounded response metadata, elapsed time, and failure classification without storing secrets or untrusted response bodies as logs.',
+					'After the retry policy is exhausted, move the delivery to a dead-letter or failed state with a reason and a safe replay action. Replay should create a new attempt for the same event and preserve the old history. Give operators a way to pause a destination, repair credentials or payload mapping, and resume without releasing every failed event at once. A per-destination rate and concurrency limit prevents one customer endpoint from consuming the whole worker fleet.',
+				],
+				bullets: ['Classify 2xx, 3xx, 4xx, 5xx, timeouts, and transport failures deliberately', 'Disable or pause destinations after repeated permanent failures', 'Keep dead-lettered deliveries inspectable but access-controlled', 'Replay with a new attempt and the same stable event identity', 'Limit concurrency and rate per destination as well as globally'],
+			},
+			{
+				heading: 'Verify the queue with a failure matrix',
+				paragraphs: [
+					'Use a local destination server that can return success, a 400, a 401, a 429 with Retry-After, a 500, a delayed response, a connection close, and a response that succeeds but arrives after the client deadline. Assert the delivery state, attempt number, next-attempt time, and outbound headers for each case. Test two workers claiming the same row and prove that only one lease holder updates that attempt.',
+					'Then test the operational path through the real proxy and queue configuration. Kill a worker after the outbound server records the request, restart it, and verify that the duplicate is harmless. Fill the queue, pause a destination, exhaust retries, replay one event, rotate its secret, and deploy a new payload version. Measure queue age, delivery latency, attempts, permanent failures, retries, dead letters, replay counts, and per-destination saturation—not only total success rate.',
+				],
+				bullets: ['A duplicate event causes one business effect at the destination', 'A worker crash creates recovery or a visible unknown outcome, never silent loss', 'Backoff and jitter prevent a destination outage from causing a retry burst', 'Permanent failures stop on schedule and retain an operator explanation', 'Replay is authorized, auditable, bounded, and safe to repeat', 'Payload signatures, headers, logs, and metrics exclude secrets and unnecessary personal data', 'Dashboards show oldest pending delivery and per-destination health', 'Schema changes are tested against consumers before rollout'],
+			},
+		],
+	},
+	{
 		slug: 'build-stale-while-revalidate-cache-service-worker',
 		title: 'How to Build a Stale-While-Revalidate Cache with a Service Worker',
 		seoTitle: 'Build a Stale-While-Revalidate Service Worker Cache | PilotLab',

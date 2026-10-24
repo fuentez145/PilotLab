@@ -5867,4 +5867,64 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'postgresql-19-upgrade-checklist-rc1',
+		title: 'PostgreSQL 19 RC 1: A Practical Upgrade Checklist',
+		seoTitle: 'PostgreSQL 19 RC 1 Upgrade Checklist | PilotLab',
+		dek: 'PostgreSQL 19 RC 1 is available for testing, not yet general production adoption. Here is how to evaluate its changes, migration path, extensions, and rollback before the planned November release.',
+		published: '2026-10-24',
+		updated: '2026-10-24',
+		readTime: '8 min read',
+		category: 'Platform engineering',
+		keyword: 'PostgreSQL 19 upgrade checklist',
+		intro: 'PostgreSQL 19 RC 1 was released on October 15, 2026. The PostgreSQL Global Development Group says it should be mostly identical to the initial release, but it remains a release candidate: more fixes may land before general availability, currently planned for November 19. That makes this a useful window for compatibility testing—not a reason to upgrade production blindly. This checklist turns the announcement and release documentation into a concrete evaluation plan for product teams running APIs, background jobs, and reporting workloads on PostgreSQL.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'PostgreSQL Global Development Group — PostgreSQL 19 RC 1 Released', url: 'https://www.postgresql.org/about/news/postgresql-19-rc-1-released-3409/' },
+			{ label: 'PostgreSQL 19 Release Notes', url: 'https://www.postgresql.org/docs/19/release-19.html' },
+			{ label: 'PostgreSQL Documentation — Upgrading a Cluster', url: 'https://www.postgresql.org/docs/19/upgrading.html' },
+		],
+		sections: [
+			{
+				heading: 'Treat the release candidate as a test target, not a promise',
+				paragraphs: [
+					'RC 1 is a significant compatibility signal, but it is not the same thing as a supported general-availability release. The official announcement identifies November 12 as the planned RC 2 date and November 19 as the planned PostgreSQL 19 release date, subject to issues that could change the schedule. Pin the exact RC build in a disposable environment and record the date and package source in test results.',
+					'Use the release notes as a change inventory. PostgreSQL 19 includes features such as concurrent table repacking, planner-advice extensions, logical replication of sequence values, standby read-your-writes support through `WAIT`, and parallel autovacuum of table indexes. None of those is automatically a reason to upgrade. Start with changes that touch your workload, operations, extensions, or security policy.',
+				],
+				bullets: ['Label RC 1 environments clearly so they cannot be mistaken for production', 'Pin server, client, extension, and migration-tool versions in the test record', 'Read the Migration section and every intervening major-version release note', 'Write down the decision: adopt after GA, wait for a minor release, or remain on the current major', 'Do not present planned dates as guaranteed availability'],
+			},
+			{
+				heading: 'Inventory application and extension compatibility first',
+				paragraphs: [
+					'Before copying data, inventory every client and extension that touches the cluster: API drivers, migration tools, connection pools, ORM behavior, logical replication, foreign data wrappers, backup agents, monitoring, and connection proxies. Test the application’s actual queries and transaction patterns, not only a health check. Keep a separate list of SQL and configuration changes that are deliberate improvements rather than compatibility requirements.',
+					'The 19 release notes call out concrete migration concerns. MD5 authentication is deprecated and produces a warning after successful use; RADIUS support is removed; `standard_conforming_strings` is forced on; and database, role, and tablespace names containing carriage returns or line feeds are disallowed. Check your cluster and role inventory for these conditions before an upgrade window. If old dumps were created with `standard_conforming_strings = off`, produce new dumps with PostgreSQL 19 tools or with that setting on, as the release notes require.',
+				],
+				bullets: ['Run the application test suite against the exact RC image', 'List extensions and verify that each has a PostgreSQL 19-compatible build', 'Search roles, connection strings, and policies for MD5 authentication', 'Inspect names and dump tooling for the documented string and newline incompatibilities', 'Test prepared statements, time zones, collations, JSON, migrations, and long-running transactions'],
+			},
+			{
+				heading: 'Choose a migration path that matches your downtime budget',
+				paragraphs: [
+					'A PostgreSQL major upgrade is not a minor binary replacement. The official documentation says a major release can change the internal storage format, so moving from an earlier major version requires `pg_upgrade`, dump and restore, or a replication-based approach. A minor release within the same major is different: its storage format remains compatible and normally needs only a controlled executable replacement and restart.',
+					'For a small database with a maintenance window, rehearse dump and restore because it is straightforward and exposes schema or extension problems early. For a larger service, benchmark `pg_upgrade` in a clone and measure validation, index rebuild, statistics refresh, and rollback time. Logical replication can reduce the final cutover to a short interruption, but it adds replication state, sequence and DDL concerns, conflict handling, and a more involved rollback plan. Pick based on measured recovery objectives, not the phrase “near zero downtime.”',
+				],
+				bullets: ['Dump/restore: simplest boundary, but duration scales with data and validation', 'pg_upgrade: usually faster in place, but requires a rehearsed stop, checks, and rollback', 'Logical replication: short cutover potential, with extra replication and schema operations', 'Back up before every rehearsal and verify that a restore is actually usable', 'Document the exact commands, owners, stop conditions, and reverse path'],
+			},
+			{
+				heading: 'Test behavior, not just that the server starts',
+				paragraphs: [
+					'Load a production-shaped, sanitized snapshot into an isolated PostgreSQL 19 cluster and run the same migrations, API tests, workers, reports, and operational queries used in release review. Compare results and plans for the slowest and most important queries. Measure connection establishment, transaction latency, lock waits, replication lag, autovacuum behavior, backup duration, and disk growth. A green application smoke test is not enough when a planner, vacuum, or driver behavior changes under real cardinalities.',
+					'Exercise failure paths deliberately. Kill a worker during a transaction, pause replication, fill disk in a disposable environment, restore the backup, rotate credentials, and perform the planned cutover twice. If you evaluate new PostgreSQL 19 features such as concurrent repacking or parallel autovacuum, isolate them behind a measured change and verify their operational cost before making them part of the migration itself.',
+				],
+				bullets: ['Schema migrations complete from a clean and an upgraded starting point', 'Read and write API flows return equivalent business results', 'Background jobs, queues, exports, and scheduled reports recover correctly', 'Query latency and plans are compared using representative data', 'Backups, restores, monitoring, failover, and credential rotation are tested', 'The test records include failures found, fixes made, and remaining limitations'],
+			},
+			{
+				heading: 'Plan the production decision and rollback honestly',
+				paragraphs: [
+					'Before adoption, define an explicit go/no-go checklist: compatible extensions, successful rehearsal, acceptable performance variance, verified restore, staffed cutover, and a rollback that does not depend on pretending writes never happened. A database downgrade is not a routine reverse deployment. If the new cluster accepts writes, reverting may require restoring the old cluster and reconciling changes or using a planned replication topology. Write that recovery procedure before the window, then test it.',
+					'After cutover, watch application errors, query latency, lock and connection saturation, replication health, autovacuum activity, disk and WAL growth, backup completion, and user-visible workflows. Keep the RC language accurate in internal and external communication. PostgreSQL 19 may be the right target to test now, but the production recommendation should follow the project’s final release and your own compatibility evidence.',
+				],
+				bullets: ['The exact target version and adoption gate are approved by an owner', 'A tested backup and restore is available before the change', 'Cutover, pause, validation, and abort criteria are written and staffed', 'Rollback accounts for writes made after cutover and cannot rely on wishful data loss', 'Dashboards and alerts cover database, application, replication, and backup health', 'The team has a documented follow-up plan for RC 2, GA, and later minor releases'],
+			},
+		],
+	},
 ];

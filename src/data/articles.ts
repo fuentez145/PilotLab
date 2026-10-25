@@ -5927,4 +5927,73 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-safe-csv-import-pipeline-nodejs',
+		title: 'How to Build a Safe CSV Import Pipeline in Node.js',
+		seoTitle: 'Build a Safe CSV Import Pipeline in Node.js | PilotLab',
+		dek: 'Turn untrusted CSV files into validated records without loading the whole upload into memory, corrupting quoted fields, partially writing a tenant, or exporting spreadsheet formulas back to users.',
+		published: '2026-10-25',
+		updated: '2026-10-25',
+		readTime: '10 min read',
+		category: 'Web applications',
+		keyword: 'how to build a safe CSV import pipeline in Node.js',
+		intro: 'CSV import is often treated as a form upload followed by `split(",")`. That shortcut breaks as soon as a customer uploads a quoted comma, a multiline address, an unexpected encoding, or more rows than the process can hold in memory. A production import is a small data pipeline: receive a bounded file, parse CSV grammar, validate each row against a versioned contract, stage the results, and publish them only after the import can be reviewed or committed safely. This tutorial gives product teams a provider-neutral design using Node.js streams and a relational database.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'Node.js — Readline async iterator', url: 'https://nodejs.org/api/readline.html#rlsymbolasynciterator' },
+			{ label: 'Node.js — Stream pipeline()', url: 'https://nodejs.org/api/stream.html#streampipelinesource-transforms-destination-options' },
+			{ label: 'OWASP — CSV Injection', url: 'https://owasp.org/www-community/attacks/CSV_Injection' },
+			{ label: 'PostgreSQL — COPY', url: 'https://www.postgresql.org/docs/current/sql-copy.html' },
+		],
+		sections: [
+			{
+				heading: 'Define the import contract before accepting a file',
+				paragraphs: [
+					'Decide what the file represents and what success means before writing the parser. A useful contract names the expected columns, whether a header is required, how empty values and dates are interpreted, the maximum file size, the maximum row and field lengths, the tenant that owns the import, and whether duplicate business keys update or reject existing records. Store the contract version with every import so a later re-run can explain which rules were applied.',
+					'Keep upload, validation, and publication as separate states. An accepted file is not yet trusted data, and a file with some valid rows is not automatically a successful import. Give the caller an import ID, process asynchronously for anything beyond a small request, and expose counts for read, valid, invalid, staged, committed, and skipped rows.',
+				],
+				bullets: ['Authenticate before creating the import and bind it to a server-owned tenant ID', 'Allowlist content type and extension, but do not treat either as proof of CSV grammar', 'Set byte, row, field, and processing-time limits independently', 'Choose all-or-nothing, partial-acceptance, or review-before-commit semantics explicitly', 'Make the import contract and schema version visible in the result'],
+			},
+			{
+				heading: 'Stream the upload and parse CSV grammar correctly',
+				paragraphs: [
+					'Use a streaming upload path and an RFC-aware CSV parser that handles delimiters inside quoted fields, escaped quotes, and newlines inside a quoted field. Do not split the raw body on commas or newline characters. Node’s readline async iterator can consume line-oriented input incrementally, but a parser that supports multiline fields must own buffering until a complete CSV record is recognized; use a maintained streaming CSV parser rather than assuming one physical line is one logical row.',
+					'Place the byte limit at the HTTP or object-storage boundary, then enforce parser limits while reading. Reject a field or record that grows beyond its bound instead of letting one unterminated quote accumulate in memory. Node’s stream `pipeline()` is useful for connecting a readable upload to transforms and for propagating errors, but it does not decide whether the data is valid or safe.',
+				],
+				bullets: ['Write the upload to private temporary storage or consume it through a bounded stream', 'Detect and document the expected encoding; reject or explicitly convert unsupported input', 'Support quoted delimiters, escaped quotes, CRLF, and multiline fields in tests', 'Abort on excessive bytes, columns, field length, row length, or parser nesting state', 'Delete temporary input on success, rejection, cancellation, and worker failure'],
+			},
+			{
+				heading: 'Validate headers and rows without trusting their shape',
+				paragraphs: [
+					'Normalize only what the contract permits. Trim a header if that is documented, but do not silently rename duplicate columns or guess that “phone” and “telephone” are equivalent. Compare the header set with the expected schema, reject missing required columns, and preserve the source row number in every validation error. For each row, validate type, length, range, format, requiredness, and cross-field rules before converting it into a domain record.',
+					'Keep validation errors as data rather than throwing away the whole file at the first bad row. Cap the stored error list and record an overflow count so a hostile file cannot create an unbounded error response. For large imports, write valid normalized rows and errors to staging tables or protected object storage, then let an operator download a bounded report without exposing the original upload to another tenant.',
+				],
+				bullets: ['Use a fixed column-to-field mapping owned by the server', 'Reject duplicate headers and unexpected required-field omissions', 'Record source row, column, safe error code, and redacted value context', 'Normalize dates, numbers, and identifiers with an explicit locale policy', 'Do not query or mutate production records while the parser still accepts unbounded input'],
+			},
+			{
+				heading: 'Stage first, then commit with database boundaries',
+				paragraphs: [
+					'For a relational application, stage normalized rows with an import ID, tenant ID, source row number, schema version, and validation status. Add unique constraints that reflect the business key and index the columns used to reconcile existing records. Staging makes preview, retry, and support investigation possible; it also prevents a process crash halfway through a direct write from looking like a successful import.',
+					'PostgreSQL’s `COPY` can move data between a table and a file or standard input and supports CSV options, but speed does not replace validation or authorization. Load only into a tenant-scoped staging table using an application-owned connection, then apply a deliberate transaction or bounded batches into domain tables. If a batch can be retried, make its writes idempotent with a unique import-and-row key or an upsert policy that has been reviewed for concurrent imports.',
+				],
+				bullets: ['Never let a client choose a table, column list, or SQL fragment', 'Use staging rows to preserve import identity and source-row traceability', 'Apply tenant filters in the database operation, not only in application memory', 'Define duplicate-key behavior before production: reject, update, or skip', 'Bound transaction size and make crash recovery restartable from a durable checkpoint'],
+			},
+			{
+				heading: 'Prevent formula injection and data leakage',
+				paragraphs: [
+					'CSV is also an output format. If users can download rejected values, imported names, or an audit report and open it in spreadsheet software, treat cells beginning with formula-triggering characters as a security concern. OWASP documents formula injection involving values beginning with characters such as `=`, `+`, `-`, `@`, tab, carriage return, or line feed, and notes that separators and quotes can change where a dangerous value begins. Escape or prefix cells according to the target spreadsheet and product policy, or provide a non-spreadsheet report format when preserving exact values matters.',
+					'Keep raw files and error reports private, short-lived, and tenant-scoped. Do not put full rows, secrets, access tokens, or personal data into logs or job names. A validation error should help the user repair row 184 without becoming a second copy of the customer database. Authorize import status, preview, download, retry, and commit independently.',
+				],
+				bullets: ['Treat every uploaded cell as untrusted text, including values that look numeric or harmless', 'Sanitize CSV exports for their actual spreadsheet consumer, not by one universal rule', 'Use opaque import IDs and authorization checks on every read and write action', 'Redact values in logs and cap report retention', 'Test tenant switching, expired links, and logout during an active import'],
+			},
+			{
+				heading: 'Verify failure modes and publish only a complete result',
+				paragraphs: [
+					'Build a fixture set before connecting the importer to production tables: quoted commas, escaped quotes, multiline fields, CRLF and LF, empty values, duplicate headers, invalid UTF-8, an unterminated quote, a huge field, a huge row, a formula-like value, duplicate business keys, and a file that ends halfway through a record. Assert row numbers, error codes, memory behavior, cleanup, and the final state for each fixture.',
+					'Exercise operational failures too. Kill the worker during parsing and during commit, retry the same import, upload two imports for one tenant, fill staging storage, cancel the browser, expire the temporary file, and make the database connection fail between batches. The import must end in a visible state such as uploaded, validating, review-required, committing, completed, failed, or cancelled. Never show “completed” because the file was received; show the durable counts and the next safe action.',
+				],
+				bullets: ['Valid rows produce the expected domain records exactly once', 'Invalid rows remain inspectable without exposing another tenant’s data', 'A retry resumes or restarts deterministically without duplicate side effects', 'Parser and database memory stay within measured limits for the largest allowed file', 'Temporary files, staging rows, and abandoned jobs have bounded cleanup', 'Metrics cover bytes, rows, duration, validation failures, commit failures, queue age, and storage use', 'The production proxy, object store, worker, database, and download route are tested together'],
+			},
+		],
+	},
 ];

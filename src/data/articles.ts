@@ -21,6 +21,86 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'use-nodejs-permission-model-production-workers',
+		title: 'How to Use the Node.js Permission Model for Production Workers',
+		seoTitle: 'Use the Node.js Permission Model for Production Workers | PilotLab',
+		dek: 'Constrain a Node.js worker’s filesystem, network, and process access with an auditable rollout—without mistaking the permission model for a sandbox.',
+		published: '2026-10-26',
+		updated: '2026-10-26',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to use the Node.js permission model for production workers',
+		intro: 'A background worker often needs less authority than the application that launches it. A document processor may need to read one temporary directory and write one output directory; an integration worker may need outbound network access but no child processes. Node.js now provides a stable Permission Model behind `--permission`, which lets operators make those boundaries explicit. This tutorial shows how to audit a worker, write a narrow launch policy, verify denied operations, and keep the threat model honest.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js — Permission Model', url: 'https://nodejs.org/api/permissions.html' },
+			{ label: 'Node.js — Command-line API and permission flags', url: 'https://nodejs.org/api/cli.html#--permission' },
+			{ label: 'Node.js Learn — Security Best Practices', url: 'https://nodejs.org/en/learn/getting-started/security-best-practices' },
+		],
+		sections: [
+			{
+				heading: 'Start with a worker-specific threat model',
+				paragraphs: [
+					'The Permission Model is most useful when a process has a narrow, predictable job. Start by writing down the worker’s inputs, outputs, dependencies, and operational actions. For example, a queue consumer that converts uploaded documents might read `/srv/app/config` and `/srv/app/incoming`, write `/srv/app/processed`, call an OCR API, and emit logs. It should not need arbitrary filesystem writes, child processes, worker threads, or an inspector.',
+					'This is a containment boundary for trusted code and dependencies, not a way to run hostile JavaScript safely. Node.js describes it as a “seat belt”: malicious code may bypass the model, and OS-level isolation is still required for an untrusted workload. Use a separate OS user, container, seccomp/AppArmor policy, or a stronger sandbox when the worker processes attacker-controlled code or must resist a compromised runtime.',
+				],
+				bullets: ['List every filesystem path the worker must read and write', 'List each network destination and whether access is inbound, outbound, or both', 'Record whether the job really needs child processes, native addons, WASI, FFI, or workers', 'Keep secrets in the environment or a secret manager, not in a broadly readable directory', 'Treat the policy as an operational contract that changes with the code'],
+			},
+			{
+				heading: 'Audit before enforcing permissions',
+				paragraphs: [
+					'Run the worker with `--permission-audit` in a staging environment that exercises its real startup, queue, retry, and shutdown paths. Audit mode performs permission checks and publishes violations through Node’s diagnostics channel without denying access. It is useful for discovering requirements, but it is not evidence that the worker is safe: a test that never processes a real job will not reveal a job-only file or network access.',
+					'Capture the audit events with the same logging and redaction controls used in production. Review each path and destination rather than copying every observed access into a permissive allowlist. A broad write root can turn a path traversal or buggy cleanup routine into a much larger incident. Repeat the audit after dependency updates and after adding a new job type.',
+				],
+				bullets: [
+					'Use a representative fixture set and process at least one failure and retry',
+					'Exercise startup before the queue is connected, not only the happy path',
+					'Inspect audit events for unexpected package caches, temp paths, and config files',
+					'Convert paths to stable deployment locations before writing the policy',
+					'Fail the audit review when a new capability is unexplained, not when it is merely new',
+				],
+			},
+			{
+				heading: 'Write the smallest enforce-mode command',
+				paragraphs: [
+					'Enable enforcement with `--permission`, then grant only the capabilities the worker requires. Filesystem reads and writes are separate flags, so a read-only configuration directory need not also be writable. Network, child-process, worker-thread, addon, WASI, FFI, and inspector capabilities are separately controlled. Keep the command in the deployment definition so the policy is reviewed with the application, not hidden in an operator’s shell history.',
+					'An illustrative launch command for the document worker is shown below. The exact paths and hostnames are examples: derive yours from the audit and deployment layout. If the worker uses a database, queue, or API, grant the minimum network scope your Node.js version supports and verify how your runtime resolves hostnames and ports before relying on the boundary.',
+				],
+				bullets: [
+					'`node --permission --allow-fs-read=/srv/app/config,/srv/app/incoming --allow-fs-write=/srv/app/processed worker.js`',
+					'Add `--allow-net=api.example.test:443` only when outbound network access is required and supported by your deployment target',
+					'Add `--allow-child-process` only for a documented subprocess contract',
+					'Do not add `--allow-worker`, `--allow-addons`, `--allow-wasi`, or `--allow-ffi` “just in case”',
+					'Keep inspector access disabled for production workers unless its operational need is explicit and separately controlled',
+				],
+			},
+			{
+				heading: 'Make denied access observable and actionable',
+				paragraphs: [
+					'An enforcement failure raises `ERR_ACCESS_DENIED` and identifies the permission and resource involved. Treat that as a configuration or application defect, not as a reason to grant a filesystem root. Log the structured error without leaking credentials or sensitive path components, mark the job according to your retry policy, and alert when a denial is new or frequent.',
+					'Keep capability failures distinguishable from ordinary job failures. A missing input file, a timeout from an external API, and a denied child process have different owners and remediations. If the worker can safely continue without an optional integration, make that fallback explicit; otherwise fail closed and send the job to a bounded dead-letter path rather than retrying a deterministic denial forever.',
+				],
+				bullets: ['Assert `error.code === \'ERR_ACCESS_DENIED\'` in targeted tests', 'Record the denied permission scope and a redacted resource identifier', 'Bound retries for deterministic configuration failures', 'Expose a health or readiness signal when required capabilities are unavailable', 'Review permission-denial rates alongside deploy and dependency-change events'],
+			},
+			{
+				heading: 'Test the policy as part of the worker contract',
+				paragraphs: [
+					'Test the worker twice: once with the normal development command and once with the exact production permission command. The second test should process representative jobs and deliberately attempt operations that must fail. Check that allowed reads and writes work, the output directory cannot be replaced by an unintended path, an unapproved network request is denied, and a subprocess cannot be spawned when that capability is absent.',
+					'Also test deployment details that can invalidate an otherwise correct policy. Symlinks inside granted paths need review because Node documents that they can resolve outside the granted location. Relative paths, container mounts, generated temporary directories, package managers, native modules, and log destinations should all be tested in the same image and user context as production. Do not treat a green unit suite as proof that the launch policy matches the deployed filesystem.',
+				],
+				bullets: ['Allowed configuration reads succeed from a clean deployment image', 'Expected input and output paths work under the production OS user', 'Unapproved reads, writes, network calls, and subprocesses fail predictably', 'Symlinks and mounted volumes are reviewed rather than assumed safe', 'Queue acknowledgement and retry behavior remain correct after a denial', 'The exact command line is covered by a smoke test or deployment check'],
+			},
+			{
+				heading: 'Know when to use a stronger boundary',
+				paragraphs: [
+					'The Permission Model reduces accidental authority and limits what trusted application code can do through many Node APIs. It does not replace dependency review, OS permissions, container isolation, network egress controls, secret management, input validation, or resource limits. Node’s documentation also lists limitations and known issues, including symlink behavior and operations that occur outside ordinary runtime checks.',
+					'Use it as one layer in a platform design: a dedicated worker identity, read-only image, narrowly mounted volumes, restricted egress, bounded CPU and memory, and observable job state. Revisit the policy when a dependency adds native code, a new conversion tool is introduced, or the worker begins processing untrusted scripts. The right outcome is not “the flag is present”; it is a worker whose authority is understandable, tested, and revocable.',
+				],
+				bullets: ['Permission flags are version-pinned and documented with the worker', 'The worker runs as a dedicated least-privilege OS identity', 'Container mounts and egress rules reinforce the Node policy', 'Secrets are not made readable by broad path grants', 'A rollback exists if enforcement exposes an undocumented dependency', 'The team knows which changes require a permission review'],
+			},
+		],
+	},
+	{
 		slug: 'build-resumable-browser-uploads-tus',
 		title: 'How to Build Resumable Browser Uploads with tus',
 		seoTitle: 'Build Resumable Browser Uploads with tus | PilotLab',

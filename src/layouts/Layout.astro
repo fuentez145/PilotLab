@@ -81,7 +81,7 @@ const jsonLd =
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap"
 			rel="stylesheet"
 		/>
 	</head>
@@ -135,20 +135,23 @@ const jsonLd =
 </html>
 
 <style is:global>
+	/* Hallmark · editorial workshop · theme: terracotta / paper · redesign: all routes */
+	/* Critique: the old system was polished but uniform; this gives PilotLab a warmer, more memorable studio voice. */
 	:root {
-		--ink: #0e1c33;
-		/* 3% darker than the handoff's #2563ff — smallest step to WCAG AA (4.5:1) on --bg */
-		--blue: #2460f7;
-		--blue-lt: #5b8cff;
-		--bg: #eef1f6;
-		--body: #3c4a63;
-		/* darkened from the handoff's #8a97ad to reach WCAG AA for small labels */
-		--muted: #5f6b85;
-		--muted-dark: #8fa0bd;
-		--hairline: rgba(14, 28, 51, 0.2);
-		--hairline-dark: rgba(255, 255, 255, 0.15);
-		--sora: 'Sora', sans-serif;
-		--sans: 'Instrument Sans', system-ui, sans-serif;
+		--ink: #1d1b18;
+		--blue: #c65335;
+		--blue-lt: #ef9b7d;
+		--bg: #f3eee6;
+		--body: #514a43;
+		--muted: #756d64;
+		--muted-dark: #b9aea1;
+		--hairline: rgba(29, 27, 24, 0.2);
+		--hairline-dark: rgba(255, 255, 255, 0.18);
+		--slot-line: rgba(29, 27, 24, 0.08);
+		--slot-bg: #e8dfd3;
+		--slot-label: rgba(243, 238, 230, 0.82);
+		--sora: 'DM Serif Display', Georgia, serif;
+		--sans: 'DM Sans', system-ui, sans-serif;
 		--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 	}
 
@@ -156,6 +159,11 @@ const jsonLd =
 	*::before,
 	*::after {
 		box-sizing: border-box;
+	}
+
+	html,
+	body {
+		overflow-x: clip;
 	}
 
 	body {
@@ -173,6 +181,20 @@ const jsonLd =
 	}
 	a:hover {
 		color: var(--blue);
+	}
+
+	:where(a, button, input, textarea, summary):focus-visible {
+		outline: 3px solid var(--blue);
+		outline-offset: 4px;
+	}
+	:where(a, button):active {
+		transform: translateY(1px);
+	}
+
+	button,
+	input,
+	textarea {
+		font: inherit;
 	}
 
 	h1,

@@ -25,8 +25,10 @@ const { bordered = false } = Astro.props;
 		grid-template-columns: minmax(140px, 1fr) auto minmax(140px, 1fr);
 		align-items: center;
 		gap: 24px;
+		max-width: 1440px;
+		margin: 0 auto;
 		width: 100%;
-		padding: 30px 48px;
+		padding: 34px 32px;
 		font-size: 13px;
 		color: var(--muted);
 	}
@@ -35,12 +37,12 @@ const { bordered = false } = Astro.props;
 		white-space: nowrap;
 	}
 	.footer.bordered {
-		border-top: 1.5px solid var(--ink);
+		border-top: 1px solid var(--hairline);
 	}
 	.flogo {
 		font-family: var(--sora);
-		font-weight: 800;
-		font-size: 16px;
+		font-weight: 400;
+		font-size: 21px;
 		color: var(--ink);
 	}
 	.flogo span {
@@ -51,10 +53,8 @@ const { bordered = false } = Astro.props;
 		justify-content: center;
 		flex-wrap: wrap;
 		gap: 12px 28px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-size: 12px;
+		font-weight: 500;
+		font-size: 13px;
 	}
 	@media (max-width: 760px) {
 		.footer {

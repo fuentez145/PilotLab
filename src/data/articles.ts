@@ -21,6 +21,99 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'add-opentelemetry-metrics-nodejs-api',
+		title: 'How to Add OpenTelemetry Metrics to a Node.js API',
+		seoTitle: 'Add OpenTelemetry Metrics to a Node.js API | PilotLab',
+		dek: 'Instrument request duration, outcomes, and in-flight work with low-cardinality metrics—then export and verify them without turning observability into a second outage source.',
+		published: '2026-10-27',
+		updated: '2026-10-27',
+		readTime: '10 min read',
+		category: 'Platform engineering',
+		keyword: 'how to add OpenTelemetry metrics to a Node.js API',
+		intro: 'Logs explain individual failures and traces show one request’s path, but neither is a good dashboard for answering “is the service healthy over the last hour?” Metrics provide that aggregate view. This tutorial adds a small, useful metric set to a Node.js API with OpenTelemetry: request duration, request count, active requests, and a business-operation counter. It also covers cardinality, exporter choice, verification, and the failure modes that make otherwise well-instrumented services expensive or misleading.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'OpenTelemetry — JavaScript instrumentation', url: 'https://opentelemetry.io/docs/languages/js/instrumentation/' },
+			{ label: 'OpenTelemetry — Metrics concepts', url: 'https://opentelemetry.io/docs/concepts/signals/metrics/' },
+			{ label: 'OpenTelemetry — JavaScript exporters', url: 'https://opentelemetry.io/docs/languages/js/exporters/' },
+			{ label: 'OpenTelemetry — HTTP metric semantic conventions', url: 'https://opentelemetry.io/docs/specs/semconv/http/http-metrics/' },
+		],
+		sections: [
+			{
+				heading: 'Choose metrics and initialize the SDK before the API loads',
+				paragraphs: [
+					'Do not begin by creating a metric for every value available in the request. Start with operational questions: how many requests are arriving, how long do they take, which outcomes are failing, and how much work is currently in flight? For a product API, add one or two business counters only when they support a real decision, such as whether jobs are being accepted or payment attempts are failing.',
+					'OpenTelemetry separates metrics from traces deliberately. A histogram is useful for a distribution such as request duration; a counter records an accumulating number of events; an up-down counter represents a value that rises and falls, such as active requests. Use the instrument that matches the question rather than calculating an average in application code and calling it a metric.',
+					'The OpenTelemetry JavaScript guide says an application should initialize the SDK before other instrumented modules are loaded. Put initialization in a dedicated module and import it from the process entry point before importing the HTTP framework or clients. A late or missing provider can leave the application running while meters resolve to no-op implementations, which makes a deployment look healthy but produces no data.',
+					'Use a console metric exporter while wiring the service locally. The current JavaScript setup uses the NodeSDK with a metric reader and exporter; pin the package versions with the application and check the version-specific migration notes before copying an example into production. Set a stable `service.name` and a version or deployment identifier so metrics from multiple instances can be grouped intentionally.',
+				],
+				bullets: [
+					'Request duration: histogram, measured in seconds',
+					'Request count: counter, with bounded outcome attributes',
+					'Active requests: up-down counter, incremented on entry and decremented in finally',
+					'Business events: counter, only for stable event names and permitted outcomes',
+					'Keep the first dashboard small enough that an operator can act on it',
+					"npm install @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/sdk-metrics",
+					"import { NodeSDK } from '@opentelemetry/sdk-node';",
+					"import { ConsoleMetricExporter, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';",
+					"const sdk = new NodeSDK({ metricReader: new PeriodicExportingMetricReader({ exporter: new ConsoleMetricExporter() }) });",
+					'Load this module before the server module and add a bounded shutdown path that gives exporters time to flush',
+				],
+			},
+			{
+				heading: 'Create instruments with safe attributes',
+				paragraphs: [
+					'Get a meter from the OpenTelemetry API once at module scope, then create instruments with names, units, and descriptions that explain their contract. The following shape is framework-neutral; the middleware or route adapter supplies the method and matched route. Record the route template, not the raw URL, so `/users/123` and `/users/456` share one time series.',
+					'Attribute choices are a capacity decision as well as a naming decision. OpenTelemetry documents that the SDK keeps aggregation state for each unique attribute combination, and high-cardinality values such as user IDs or raw paths can grow memory use. Never attach request IDs, email addresses, full URLs, exception messages, or tenant IDs to a general-purpose request metric. If tenant-level visibility is required, use a separately bounded and explicitly owned metric.',
+				],
+				bullets: [
+					"const meter = metrics.getMeter('pilotlab.api');",
+					"const duration = meter.createHistogram('http.server.request.duration', { unit: 's', description: 'Duration of HTTP server requests' });",
+					"const requests = meter.createCounter('http.server.request.count', { unit: '{request}', description: 'Completed HTTP server requests' });",
+					"const active = meter.createUpDownCounter('http.server.active_requests', { unit: '{request}', description: 'HTTP requests currently being handled' });",
+					'Allowlist method, route, status class, and a small outcome vocabulary; keep the set stable across deployments',
+				],
+			},
+			{
+				heading: 'Instrument the request boundary with finally',
+				paragraphs: [
+					'Put the measurement around the complete application operation and use a `finally` block for active-request cleanup. Capture the start time with a monotonic clock such as `performance.now()` rather than wall-clock subtraction. Record the status only after the framework has selected it, and normalize it to a bounded value such as `2xx`, `4xx`, `5xx`, or `other`. If the framework exposes the matched route only after routing, use that route template; otherwise record an explicit `unknown` value and fix the adapter rather than emitting raw paths.',
+					'Keep metric recording non-blocking from the request handler’s point of view. A temporary exporter outage must not turn a successful API call into a 500. The SDK aggregates measurements in process and exports them on a schedule, but the exporter and shutdown behavior still need capacity limits and error handling. Metrics are evidence about the service; they are not a reason to bypass the API’s timeout, authorization, or error policy.',
+				],
+				bullets: [
+					"const started = performance.now(); active.add(1, attrs);",
+					'try { await next(); } finally { const seconds = (performance.now() - started) / 1000; duration.record(seconds, attrs); requests.add(1, { ...attrs, status_class: statusClass(response.statusCode) }); active.add(-1, attrs); }',
+					'If a request is aborted, record the outcome according to the API contract instead of treating every disconnect as a server failure',
+					'Keep status and route labels bounded before they reach the instruments',
+				],
+			},
+			{
+				heading: 'Add HTTP conventions without assuming every name is final',
+				paragraphs: [
+					'OpenTelemetry publishes HTTP metric semantic conventions such as `http.server.request.duration` and `http.server.active_requests`, including recommended attributes like request method, response status, and route. Use the conventions when the instrumentation and backend versions agree on them. The conventions page currently describes HTTP metrics as a mixed-status area and explains an opt-in transition for older instrumentation, so pin the convention version and inspect what your installed libraries actually emit instead of combining duplicate series from different generations.',
+					'Automatic instrumentation may already produce HTTP metrics or spans. Before adding manual request instruments, run the service and inspect the exported names. Keep manual metrics for missing business context or a deliberately smaller contract; do not create a second copy of every automatic signal with different route normalization. A useful dashboard is consistent, not merely full.',
+				],
+				bullets: ['Check existing automatic HTTP instrumentation before registering duplicates', 'Prefer stable semantic names and units where your installed version supports them', 'Pin SDK, instrumentation, and convention versions as one tested set', 'Document whether a metric is application-owned or library-owned', 'Use views to drop unused instruments or restrict attributes before export'],
+			},
+			{
+				heading: 'Export locally, then move through a Collector',
+				paragraphs: [
+					'Console output is useful for proving that measurements are being recorded, but it is not an operational backend. OpenTelemetry recommends sending telemetry through an OpenTelemetry Collector in production; the Collector can receive OTLP and route metrics to the system your team uses for dashboards and alerts. Configure the endpoint and credentials outside source control, and keep the exporter’s timeout, retry, and queue behavior compatible with the service’s resource budget.',
+					'For a local check, generate a few requests, wait for the export interval, and confirm the service resource, metric names, units, attributes, and aggregated values. For an OTLP check, run a Collector with a debug exporter or use a staging backend, then verify that the metric arrives there. Do not treat “the process started” as proof of delivery: an incorrect endpoint, blocked egress, or TLS failure can leave the application serving traffic while telemetry disappears.',
+				],
+				bullets: ['Local: console exporter shows at least one completed export', 'Staging: OTLP exporter reaches the Collector and the Collector logs the metric', 'Production: dashboard queries match the exact emitted names and units', 'Exporter failures are observable but do not fail ordinary API requests', 'Shutdown flushes within a bounded grace period and never hangs deployment'],
+			},
+			{
+				heading: 'Verify correctness and control the cost',
+				paragraphs: [
+					'Test metrics as an API contract. Send successful, validation-error, server-error, slow, and aborted requests through the real framework and assert that each completed operation increments the counter once, records one duration, and leaves active requests at zero. Test route templates with IDs, query strings, and 404s; a route label that changes with input is a cardinality defect even when the values look readable in a log.',
+					'After rollout, watch series count, exporter queue depth, process memory, missing-data gaps, and the ratio between request metrics and access logs. Use views or a narrower attribute set when a metric grows unexpectedly. Metrics do not replace traces for a single request or logs for a detailed failure, and a green dashboard cannot prove that authorization, data correctness, or user experience is healthy.',
+				],
+				bullets: ['Every request path has a bounded route and outcome label', 'A thrown handler error still decrements active requests', 'A client disconnect does not leave a permanently active request', 'Two API instances produce mergeable resource attributes', 'Exporter outage, restart, and shutdown have tested behavior', 'Dashboards alert on user-visible symptoms, not every internal fluctuation', 'No metric attribute contains secrets, raw identifiers, or unbounded user input', 'The team can remove or rename a metric without breaking critical alerts silently'],
+			},
+		],
+	},
+	{
 		slug: 'use-nodejs-permission-model-production-workers',
 		title: 'How to Use the Node.js Permission Model for Production Workers',
 		seoTitle: 'Use the Node.js Permission Model for Production Workers | PilotLab',

@@ -6169,4 +6169,77 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'test-time-dependent-nodejs-code-with-mock-timers',
+		title: 'How to Test Time-Dependent Node.js Code with Mock Timers',
+		seoTitle: 'Test Time-Dependent Node.js Code with Mock Timers | PilotLab',
+		dek: 'Use Node’s built-in test runner to advance timers and dates deterministically—without sleeping through retries, leases, polling loops, or expiry tests.',
+		published: '2026-10-29',
+		updated: '2026-10-29',
+		readTime: '8 min read',
+		category: 'API engineering',
+		keyword: 'how to test time-dependent Node.js code with mock timers',
+		intro: 'Tests that wait for real seconds are slow and still miss boundary conditions. Tests that stub only `Date.now()` can disagree with the timers that schedule the work. Node’s built-in test runner includes mock timers and dates, so a test can move application time forward deliberately while keeping the production code on ordinary timer APIs. This tutorial shows how to test retry delays, expiry, polling, and cancellation without turning time into a global source of flaky state.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — Test runner mocking', url: 'https://nodejs.org/api/test.html#mocking' },
+			{ label: 'Node.js Documentation — Mocking timers', url: 'https://nodejs.org/api/test.html#timers' },
+			{ label: 'Node.js Documentation — Mocking dates', url: 'https://nodejs.org/api/test.html#dates' },
+			{ label: 'Node.js Documentation — Timers', url: 'https://nodejs.org/api/timers.html' },
+		],
+		sections: [
+			{
+				heading: 'Separate wall-clock time from scheduled work',
+				paragraphs: [
+					'Time-dependent behavior usually combines two questions: what timestamp should the application observe, and when should a callback or promise become runnable? A token may expire at a wall-clock deadline while a retry waits through `setTimeout()`. Mocking only one of those makes tests internally inconsistent. Decide which clock the feature uses before choosing a test strategy.',
+					'Keep production code explicit about the boundary. A retry helper should receive an operation and a policy, while a lease checker should compare a stored expiry with the current time. Avoid scattering `Date.now()` and timer calls through business logic when a small module can own the decision. The test can then verify the policy rather than asserting incidental implementation details.',
+				],
+				bullets: ['Use wall-clock time for expiry and timestamps that leave the process', 'Use a monotonic duration for measuring elapsed work where appropriate', 'Inject a clock only when the feature needs a portable abstraction', 'Keep retry count, delay, and deadline as explicit policy inputs', 'Never make a test pass by increasing a real sleep'],
+			},
+			{
+				heading: 'Enable Node’s mock timers inside one test',
+				paragraphs: [
+					'Node’s test context exposes mock timers through `t.mock.timers`. Enable only the APIs the test needs and reset them during teardown or at the end of the test. The exact options are version-sensitive, so pin a supported Node version in CI and check the Node documentation when upgrading. A minimal shape is:',
+				],
+				bullets: [
+					"import { test } from 'node:test';",
+					"test('runs a delayed action deterministically', async (t) => { t.mock.timers.enable({ apis: ['setTimeout'] }); const promise = delayedAction(); t.mock.timers.tick(1000); await promise; });",
+					"test('controls the observed date', (t) => { t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-01-01T00:00:00Z') }); assert.equal(new Date().toISOString(), '2026-01-01T00:00:00.000Z'); });",
+					'Keep mocked time local to the test and avoid sharing mutable clock state between concurrently running tests',
+				],
+			},
+			{
+				heading: 'Advance time, then flush the application work',
+				paragraphs: [
+					'Advancing a timer makes scheduled callbacks eligible; it does not necessarily mean every promise continuation created by those callbacks has completed. Store the promise returned by the operation, advance the clock by the exact boundary you want to test, then await the promise or yield to the event loop before asserting. This keeps the assertion about an observable result rather than an internal callback count.',
+					'Test boundaries explicitly. If a job should not run before 30 seconds, advance by 29, assert that it has not run, advance by one more second, and await the resulting work. For intervals, verify both the number of firings and the cleanup path. If the code reschedules a timer from inside its callback, advance in separate steps so a test cannot accidentally hide an infinite loop or an incorrect delay.',
+				],
+				bullets: ['Advance to just before the deadline and assert no action', 'Advance across the deadline and await the returned promise', 'Use `tick()` steps that reveal rescheduling and backoff behavior', 'Clear intervals and pending timers in the production path', 'Assert the business result, not only that a timer callback was called'],
+			},
+			{
+				heading: 'Test retries, expiry, and polling as state machines',
+				paragraphs: [
+					'Time is easiest to test when the behavior is described as states and transitions. A retrying request might move from pending to retry-wait to running, then succeed or become permanently failed. An expiring cache can move from fresh to stale to refreshed. Write the expected transitions down, then advance time one transition at a time while the dependency returns controlled results.',
+					'For a polling loop, test success, a transient failure, cancellation, and the terminal condition. Verify that a failed poll does not create overlapping requests unless that is intentional, and that stopping the loop clears the next timer. For leases, test exactly-at-expiry and just-after-expiry, then test a worker restart. Mock timers make these cases fast, but they do not prove that a real database transaction or queue visibility timeout has the same semantics; integration tests still have a role.',
+				],
+				bullets: ['Retry delays follow the documented backoff and attempt limit', 'A permanent error stops scheduling further work', 'Expiry is tested before, at, and after the boundary', 'Cancellation prevents future callbacks and resolves the caller’s contract', 'Polling cannot overlap or continue after its owner is closed'],
+			},
+			{
+				heading: 'Avoid global-clock leaks and false confidence',
+				paragraphs: [
+					'Mocked globals can leak when a test leaves timers enabled, when module initialization captures the real clock before mocking, or when tests run concurrently against shared process state. Prefer enabling mocks before importing code that reads time at module scope, or refactor that code to read the clock at operation time. Reset the mock after each test and do not run tests that mutate the same global clock in parallel.',
+					'Mock time also skips work that happens outside the mocked APIs. Network latency, database lock waits, filesystem timing, event-loop starvation, scheduler behavior, and a process restart remain real concerns. Use unit tests for deterministic policy, then add a small integration test with real timers and a controllable dependency to verify that the wiring and cleanup work in a live process.',
+				],
+				bullets: ['Mock before time-sensitive module initialization', 'Reset or dispose the mock after every test', 'Do not mix real sleeps with mocked timers in one assertion path', 'Run shared-global timer tests serially or isolate them in a process', 'Cover real I/O and shutdown behavior with integration tests'],
+			},
+			{
+				heading: 'Production checklist for reliable time-based behavior',
+				paragraphs: [
+					'A deterministic clock test is valuable when it checks a contract that matters in production: a retry will not storm a dependency, a lease will not run twice, a cache will refresh, or a request deadline will stop work. Keep time policy observable with safe labels such as operation, attempt, outcome, and configured budget. Do not log full payloads or secrets merely because a test fixture made them available.',
+					'Before shipping, run the focused unit tests, the complete suite, and an integration path with real I/O. Review Node-version support for the mock APIs, document whether timestamps are UTC, and check that a graceful shutdown cancels timers and awaits in-flight work. The goal is not to pretend time is simple; it is to make the important transitions reproducible and the remaining system assumptions visible.',
+				],
+				bullets: ['Clock and timezone assumptions are explicit and tested', 'Timer mocks are scoped, reset, and compatible with the CI Node version', 'Boundary tests cover one tick before, at, and after expiry', 'Retries, polling, leases, and cancellation have terminal states', 'Integration tests cover real event-loop, I/O, and shutdown behavior', 'Metrics expose attempts, delay, age, expiry, and cancellation without sensitive labels', 'A time-policy change has a reviewable test and rollback path'],
+			},
+		],
+	},
 ];

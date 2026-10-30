@@ -21,6 +21,111 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'coordinate-multi-tab-web-app-with-web-locks',
+		title: 'How to Coordinate a Multi-Tab Web App with the Web Locks API',
+		seoTitle: 'Coordinate Multi-Tab Web Apps with Web Locks | PilotLab',
+		dek: 'Prevent duplicate sync, refresh, and migration work across browser tabs with an origin-scoped lock—then add timeouts, observability, and a fallback for unsupported clients.',
+		published: '2026-10-30',
+		updated: '2026-10-30',
+		readTime: '9 min read',
+		category: 'Web application engineering',
+		keyword: 'how to coordinate multiple browser tabs with Web Locks API',
+		intro: 'A web application can be open in several tabs at once, and each tab may otherwise refresh the same data, run the same cleanup job, or write conflicting state to IndexedDB. The Web Locks API provides a browser-managed coordination primitive: scripts in the same origin request a named lock, do work while the callback is running, and release it automatically when the callback completes. This tutorial uses it to elect one tab as the sync owner, shows how to avoid waiting forever, and explains why a lock is coordination—not a substitute for server-side authorization or transactional writes.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'MDN — Web Locks API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API' },
+			{ label: 'MDN — LockManager.request()', url: 'https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request' },
+			{ label: 'W3C — Web Locks API specification', url: 'https://www.w3.org/TR/web-locks/' },
+			{ label: 'MDN — Secure contexts', url: 'https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Secure_Contexts' },
+		],
+		sections: [
+			{
+				heading: 'Use a lock for one shared browser resource',
+				paragraphs: [
+					'The problem is not simply that several tabs can execute JavaScript. It is that they can perform the same side effect at the same time: three tabs may all pull a notification feed, compact an offline queue, or refresh an expiring local cache. A named Web Lock lets those contexts coordinate without inventing timestamps in localStorage. The lock name is an application-defined string, and the lock manager is scoped to the origin and its storage context.',
+					'Choose a resource name that describes the thing being protected, not the current tab. For example, `pilotlab:sync:notifications:v1` can mean that at most one tab performs notification synchronization. Use a different name for unrelated work. If two operations must be mutually exclusive, they need the same lock name; a lock called `sync` does not automatically protect a write called `save`.',
+				],
+				bullets: [
+					'Good candidates: one network sync loop, cache cleanup, or local migration per origin',
+					'Keep lock names stable, documented, and free of user-controlled input',
+					'Use HTTPS: MDN documents Web Locks as available only in secure contexts',
+					'Assume tabs and workers can disappear; the browser releases a held lock when the callback ends or its context is gone',
+					'Do not use a lock as a permission check for a server API or as durable business state',
+				],
+			},
+			{
+				heading: 'Wrap the critical work in navigator.locks.request()',
+				paragraphs: [
+					'`navigator.locks.request()` accepts a name, optional options, and a callback. The callback runs when the lock is granted, and the lock remains held until its returned promise settles. Put the complete critical operation inside that async callback. Do not acquire the lock, start an unawaited promise, and return: that releases the lock before the actual write or request has finished.',
+					'The function returns a promise for the callback result. That makes the boundary easy to test and keeps the release rule visible in code. The example below uses an exclusive lock, the default mode, because only one tab should run the sync. The server endpoint still needs authentication, authorization, idempotency, and conflict handling; this browser lock only prevents cooperating contexts in this origin from starting the operation together.',
+				],
+				bullets: [
+					"async function syncOnce() { return navigator.locks.request('pilotlab:sync:notifications:v1', async () => { await pullAndPersistNotifications(); }); }",
+					'Keep `pullAndPersistNotifications()` fully awaited, including the final IndexedDB transaction or server acknowledgement',
+					'Use exclusive mode for a single writer; shared mode is for reads that may safely run together',
+					'Never put access tokens, customer IDs, or payloads in the lock name',
+				],
+			},
+			{
+				heading: 'Turn one tab into a cooperative sync owner',
+				paragraphs: [
+					'For a periodic sync, every tab can attempt the same lock. The tab that acquires it performs one bounded sync, waits for the callback to finish, and then tries again on the next interval. If the owner tab closes or crashes, its lock is no longer held and another waiting request can proceed. This is a cooperative leader-election pattern, not a permanent identity for a particular tab.',
+					'Keep the critical section short. Fetch only the work needed for one cycle, commit the local result, and release the lock. A long-lived lock can make every other tab appear frozen and increases the impact of a stuck network request. Prefer a short lock around each cycle over holding it for the lifetime of the page, unless you have explicitly designed and tested a primary-tab protocol.',
+				],
+				bullets: [
+					"const timer = setInterval(() => { void syncOnce().catch(reportSyncFailure); }, 30_000);",
+					'Run an initial attempt through the same locked function, then schedule later attempts with a bounded interval',
+					'Use server cursors, ETags, or idempotency keys so a crash after a remote side effect is recoverable',
+					'Persist last-success and last-failure state separately from lock ownership so the UI can explain stale data',
+					'If a tab is hidden, reduce polling pressure, but do not assume visibility is a safe ownership signal',
+				],
+			},
+			{
+				heading: 'Bound waiting and handle contention deliberately',
+				paragraphs: [
+					'By default, a request can wait for an earlier request to release the lock. That is useful for queued work but dangerous for a user action whose result has a deadline. MDN documents `ifAvailable` for a non-waiting attempt and `signal` for aborting a queued request. Pick the behavior based on the operation: a periodic background refresh can skip when another tab owns the lock, while an offline migration may need to wait briefly and then show a recoverable state.',
+					'Use `ifAvailable` when duplicate work is unnecessary and there is a later chance to try again. The callback receives `null` when the lock cannot be granted immediately. Use an AbortController for a bounded wait when missing the lock should produce a useful fallback. Do not use `steal` as a timeout: MDN warns that the code previously inside the lock continues running and can clash with the new holder.',
+				],
+				bullets: [
+					"await navigator.locks.request('pilotlab:sync:notifications:v1', { ifAvailable: true }, async (lock) => { if (!lock) return 'skipped'; await pullAndPersistNotifications(); return 'synced'; });",
+					"const controller = new AbortController(); setTimeout(() => controller.abort(), 2_000);",
+					'Classify a skipped cycle, an aborted wait, and a sync failure separately in logs and metrics',
+					'Keep network timeouts inside the critical section shorter than the lock-wait policy when possible',
+					'Never nest locks in inconsistent orders; MDN and the specification describe deadlock risk for competing lock requests',
+				],
+			},
+			{
+				heading: 'Make the fallback and browser contract explicit',
+				paragraphs: [
+					'The API is broadly available in current browsers, but a production application should still feature-detect it. If `navigator.locks` is absent, do not silently pretend that a localStorage flag is equivalent: tabs can crash between setting and clearing it, clocks can disagree, and stale ownership can block work. Choose a conservative fallback such as allowing duplicate idempotent syncs, routing ownership through a service worker you control, or disabling the optimization while keeping the data contract safe.',
+					'Web Locks coordinate contexts that share the relevant origin and storage bucket. They do not coordinate two browser profiles, two devices, a native client, or two server processes. If correctness depends on globally unique writes, enforce that invariant at the server or database as well. The browser lock reduces duplicate work; it cannot protect an API from a malicious client that ignores it.',
+				],
+				bullets: [
+					"if (!('locks' in navigator)) { return syncWithIdempotentServerSemantics(); }",
+					'Test HTTPS, localhost development, embedded webviews, and the oldest supported browser rather than relying on a desktop browser alone',
+					'Keep all server writes safe if two clients race or a tab loses the lock after a partial operation',
+					'If a worker owns the lock, make its lifecycle, wake-up behavior, and message protocol part of the design',
+				],
+			},
+			{
+				heading: 'Verify ownership, recovery, and failure modes',
+				paragraphs: [
+					'Test with two or more tabs on the same origin and instrument the sync operation with a run ID that is not placed in the lock name. Start the same action simultaneously and verify that only one callback enters the critical section at a time. Hold the lock with a test delay, confirm that `ifAvailable` skips, then abort a queued request and verify that the next attempt can still acquire the lock.',
+					'Use `navigator.locks.query()` during development to inspect held and pending locks. It is a diagnostic snapshot, not an authorization mechanism or a durable ownership record. Exercise tab close, reload, browser crash simulation, offline mode, a stalled fetch, an IndexedDB failure, a server 409, and an unsupported browser. The expected result is bounded recovery, not a permanent “syncing” state.',
+				],
+				bullets: [
+					'At most one same-origin callback performs the protected operation at a time',
+					'An owner closing releases the lock so another tab can continue',
+					'A stalled request cannot hold the critical section without a bounded timeout',
+					'A skipped or aborted request does not surface as a false successful sync',
+					'Partial server effects are safe through idempotency, cursors, or reconciliation',
+					'Lock contention, hold duration, skips, aborts, and sync outcomes are observable without sensitive data',
+					'Unsupported clients retain correct data behavior rather than relying on stale local ownership',
+				],
+			},
+		],
+	},
+	{
 		slug: 'add-opentelemetry-metrics-nodejs-api',
 		title: 'How to Add OpenTelemetry Metrics to a Node.js API',
 		seoTitle: 'Add OpenTelemetry Metrics to a Node.js API | PilotLab',

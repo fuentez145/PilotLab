@@ -6347,4 +6347,79 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'verify-webhook-signatures-nodejs-hmac',
+		title: 'How to Verify Webhook Signatures in Node.js with HMAC',
+		seoTitle: 'Verify Webhook Signatures in Node.js with HMAC | PilotLab',
+		dek: 'Authenticate webhook requests against the exact bytes you received, reject stale or malformed signatures, and make retries safe without logging secrets.',
+		published: '2026-10-31',
+		updated: '2026-10-31',
+		readTime: '10 min read',
+		category: 'API security',
+		keyword: 'how to verify webhook signatures in Node.js',
+		intro: 'A webhook endpoint is an internet-facing command surface: anyone can send it a request that looks like an event unless your service verifies who signed the message. HMAC verification is a practical shared-secret pattern for providers and consumers that both control a secret. The details matter: sign the raw request bytes, parse the provider’s exact header contract, compare digests without an ordinary string comparison, reject stale timestamps, and make accepted events idempotent. This tutorial focuses on the verification boundary; it does not pretend a valid signature makes an event authorized for every action.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js Documentation — crypto.createHmac()', url: 'https://nodejs.org/api/crypto.html#cryptocreatehmacalgorithm-key-options' },
+			{ label: 'Node.js Documentation — crypto.timingSafeEqual()', url: 'https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b' },
+			{ label: 'RFC 2104 — HMAC', url: 'https://www.rfc-editor.org/rfc/rfc2104' },
+			{ label: 'RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Define the signature contract before writing middleware',
+				paragraphs: [
+					'HMAC authenticates a message with a secret shared by the signer and verifier. The protocol around HMAC is yours to define or the provider’s to document. Write down the algorithm, digest encoding, signed bytes, header names, timestamp format, replay window, key identifier, rotation behavior, and error responses. A signature such as `sha256=...` is not self-describing enough to implement safely without that contract.',
+					'Keep authentication separate from event handling. Verification answers “was this request created by someone holding the configured secret, and is it fresh enough?” It does not answer whether the event is allowed for this tenant, whether the referenced object still exists, or whether the business action has already run. After verification, validate the event schema and authorization context, then process it through an idempotent state transition.',
+				],
+				bullets: ['Use HMAC-SHA-256 or the provider’s documented modern algorithm; do not invent a new construction', 'Choose one canonical byte sequence, commonly timestamp + period + raw body', 'Version or identify secrets so rotation can be staged', 'Set a bounded timestamp tolerance and define the clock source', 'Return a generic verification failure without revealing which check failed'],
+			},
+			{
+				heading: 'Capture the raw body before JSON parsing',
+				paragraphs: [
+					'The signature covers bytes, not the JavaScript object produced after parsing. Whitespace, property order, escaping, and newline conventions can change the bytes while leaving the parsed JSON equivalent. Read the request body once into a bounded Buffer, verify that Buffer, and only parse JSON after authentication succeeds. Configure the framework so its JSON parser does not consume or rewrite the body before the verifier runs.',
+					'Bound the body before buffering it. A webhook endpoint should have an explicit maximum size, request timeout, content-type policy, and rate limit. If the framework exposes a stream, accumulate chunks only up to the configured limit and abort the request when it is exceeded. Never log the body or a secret during a failed verification path; payloads often contain personal or operational data.',
+				],
+				bullets: ['Read raw bytes once and keep the same Buffer for HMAC and parsing', 'Reject unsupported content types and bodies over the endpoint limit', 'Do not stringify parsed JSON to recreate the signed message', 'Run verification before schema validation that depends on trusted sender identity', 'Test through the real reverse proxy because body limits and buffering can change there'],
+			},
+			{
+				heading: 'Compute the digest and compare it safely',
+				paragraphs: [
+					'Node’s `createHmac()` creates an HMAC object with a named digest algorithm and secret key. Feed it the exact signed bytes and encode the result in the representation required by the provider, usually lowercase hexadecimal or base64. Parse the received header into its declared components before comparing; do not accept an algorithm label from the request as permission to use an arbitrary algorithm.',
+					'Use `timingSafeEqual()` for equal-length byte sequences. It throws when the input lengths differ, so decode and length-check the supplied digest first, then compare it with the computed digest. This protects the comparison step from ordinary early-exit behavior, but it does not fix a leaked secret, an oracle elsewhere in the endpoint, or a parser that accepts ambiguous encodings. Keep the whole verification path uniform and quiet.',
+				],
+				bullets: [
+					"const expected = createHmac('sha256', secret).update(signedBytes).digest();",
+					"const received = Buffer.from(signatureHex, 'hex');",
+					'if (received.length !== expected.length || !timingSafeEqual(received, expected)) reject();',
+					'Validate the encoding strictly; a forgiving hex or base64 decoder can accept values the provider never intended',
+					'Keep secrets in a secret manager or protected environment, never in source control or request headers returned to clients',
+				],
+			},
+			{
+				heading: 'Add freshness checks and key rotation',
+				paragraphs: [
+					'A captured valid request can be replayed unless the signed message includes a timestamp, nonce, or provider-issued event identifier. Parse the timestamp as a bounded value, compare it with the verifier’s current UTC time, and reject requests outside the documented tolerance. A timestamp check reduces replay exposure; it does not make an event idempotent, because a sender can retry within the valid window.',
+					'Plan rotation before the first secret expires. Accept the active key and, for a short migration period, a previous key selected by an explicit key ID or a bounded list. Record which key verified an event without recording the key itself. Remove the old key only after the provider has switched and the retry horizon has passed. If you cannot distinguish keys in the provider’s header, try only a small configured set and keep the result observable.',
+				],
+				bullets: ['Sign the timestamp as part of the authenticated bytes, not as an unsigned hint', 'Reject missing, malformed, future, and excessively old timestamps', 'Use server time synchronized by the host rather than a client-provided clock', 'Store processed event IDs with a uniqueness constraint or equivalent atomic claim', 'Test rotation, clock skew, delayed retries, and duplicate delivery explicitly'],
+			},
+			{
+				heading: 'Process accepted events as an idempotent state transition',
+				paragraphs: [
+					'Only after signature and freshness checks pass should the handler parse and validate the event. Extract a provider event ID, event type, tenant binding, and schema version. Atomically claim the event ID before performing an irreversible side effect, or persist the event in an inbox table and process it asynchronously. If the same event arrives twice, return the documented success response without sending the email, creating the charge, or changing the record twice.',
+					'Keep the acknowledgement contract aligned with the provider. A fast 2xx response after durable acceptance is often safer than holding the connection while downstream work runs. A transient internal failure should remain retryable; a malformed or unauthenticated request should not be retried forever. Never acknowledge an event that was only held in process memory or whose tenant and schema checks failed.',
+				],
+				bullets: ['Verify, validate, authorize, durably claim, then perform side effects', 'Use a unique event ID and a durable status such as received, processing, completed, or failed', 'Make retries safe across process restarts and multiple workers', 'Return status codes according to the provider’s retry rules and your durable state', 'Keep event payloads out of general logs; log IDs, outcomes, and bounded failure categories'],
+			},
+			{
+				heading: 'Test the boundary through production-shaped delivery',
+				paragraphs: [
+					'Create a deterministic signing fixture with a known secret, timestamp, body, and expected digest. Test the original bytes, one changed byte, changed whitespace, an altered timestamp, an unknown key ID, malformed encoding, a missing header, a body over the limit, and a valid signature with an invalid event schema. Assert that failures do not reach business handlers and that responses do not disclose which component failed.',
+					'Then test delivery behavior with an HTTP listener and the actual framework adapter. Send duplicate events concurrently, interrupt the handler after the durable claim, restart the worker, rotate keys, skew the test clock, and put the endpoint behind the same proxy or ingress used in production. Verify metrics for accepted, rejected, stale, duplicate, oversized, and processing-failure outcomes without using raw signatures, bodies, or tenant identifiers as high-cardinality labels.',
+				],
+				bullets: ['The verifier accepts the provider’s documented canonical bytes and rejects equivalent-but-different JSON', 'Digest comparison handles malformed and wrong-length input without throwing a 500', 'Timestamp tolerance and key rotation have boundary tests', 'Concurrent duplicate deliveries produce one business effect', 'Body, proxy, timeout, and content-type limits are enforced at the public route', 'Secrets, signatures, and payloads are absent from logs, traces, and error responses', 'A failed downstream action remains retryable without allowing duplicate side effects'],
+			},
+		],
+	},
 ];

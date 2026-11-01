@@ -6422,4 +6422,80 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-safe-url-fetcher-ai-workflow',
+		title: 'How to Build a Safe URL Fetcher for an AI Workflow',
+		seoTitle: 'Build a Safe URL Fetcher for an AI Workflow | PilotLab',
+		dek: 'Let an AI workflow retrieve approved web content without turning a user-supplied URL into an SSRF primitive: validate schemes, resolve redirects, bound the response, and verify the network boundary.',
+		published: '2026-11-01',
+		updated: '2026-11-01',
+		readTime: '10 min read',
+		category: 'AI integration and security',
+		keyword: 'how to build a safe URL fetcher for an AI workflow',
+		intro: 'An AI feature that reads a URL sounds simple: accept a link, fetch the page, and give the content to a model. The dangerous part is that the server—not the user’s browser—now makes an outbound request. Without an explicit network policy, an attacker can use that feature to probe private services, consume excessive bandwidth, follow a redirect into an internal address, or feed untrusted content into a privileged workflow. This tutorial builds a narrow URL-fetching boundary for a Node.js service and treats retrieval, content extraction, and model use as separate decisions.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'MITRE CWE-918 — Server-Side Request Forgery', url: 'https://cwe.mitre.org/data/definitions/918.html' },
+			{ label: 'Node.js — URL API', url: 'https://nodejs.org/api/url.html#class-url' },
+			{ label: 'Node.js — fetch()', url: 'https://nodejs.org/api/globals.html#fetch' },
+			{ label: 'IETF RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+			{ label: 'OWASP — SSRF Prevention Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html' },
+		],
+		sections: [
+			{
+				heading: 'Define the fetcher as a capability, not a general browser',
+				paragraphs: [
+					'Before writing code, decide what the workflow actually needs. A summarizer may need public HTML over HTTPS, a document importer may need a small PDF from an allowlisted partner, and a crawler may need a different architecture entirely. Keep the first capability narrow: one URL per job, HTTPS only, a maximum response size, a short deadline, no cookies, no user credentials, and no access to the application’s internal control plane.',
+					'MITRE classifies server-side request forgery as a weakness where an attacker can cause the server to send a request to an unintended location. The AI model does not make that boundary safer: prompt text, tool arguments, retrieved HTML, and redirects are all untrusted inputs. The fetcher must enforce policy before the content reaches the model or any downstream tool.',
+				],
+				bullets: ['Accept only the schemes and ports the product needs, usually https on 443', 'Set limits for URL length, redirects, response bytes, decompressed bytes, and total time', 'Do not forward Authorization, cookies, client certificates, or internal headers', 'Run the fetcher in a worker or isolated network segment when the risk justifies it', 'Return normalized metadata and content—not an unrestricted response object—to the model'],
+			},
+			{
+				heading: 'Parse and validate the URL before DNS or network access',
+				paragraphs: [
+					'Use the platform URL parser rather than string checks such as `url.startsWith("https://")`. Node’s WHATWG `URL` class parses the URL into protocol, hostname, port, username, password, and origin fields. Reject credentials, fragments when they have no retrieval meaning, unexpected ports, empty hosts, and hostnames that do not match the product policy. Normalize the parsed result and log only the host and a request ID, never a URL that may contain tokens.',
+					'An allowlist is the safest choice when the workflow only reads known partners. If arbitrary public URLs are required, use a deny-by-default network policy in addition to application validation. Reject loopback, link-local, private, multicast, and other non-public destinations after resolution, and account for IPv4, IPv6, alternate numeric forms, and rebinding. A hostname check performed only once before a connection is not a complete network boundary.',
+				],
+				bullets: [
+					"const target = new URL(input); if (target.protocol !== 'https:' || target.username || target.password || target.port && target.port !== '443') reject();",
+					'Prefer exact host or registered-domain allowlists for partner integrations; do not allow arbitrary subdomains unless ownership is understood',
+					'Canonicalize and validate the hostname before applying policy, but do not assume canonicalization alone proves the destination is public',
+					'Keep DNS resolution, connection, and redirect checks inside the controlled fetch path',
+					'Never let the model choose a proxy, resolver, socket address, or privileged header',
+				],
+			},
+			{
+				heading: 'Fetch with bounded redirects, time, and bytes',
+				paragraphs: [
+					'Node’s fetch API is a useful HTTP client boundary, but its defaults are not your product policy. Use an AbortSignal deadline, set `redirect: "manual"` or otherwise inspect every redirect, and re-run the URL policy for the new Location value. A redirect from an approved public host to an internal address is still an internal request. Decide whether cross-origin redirects are allowed at all; for many AI ingestion workflows, rejecting them is simpler and safer.',
+					'Check the status and Content-Type before reading the body, then read the stream incrementally into a byte budget. Content-Length is only an early signal: chunked responses and compressed content can exceed it. Limit both the bytes received and the expanded text passed to the model. Abort on a read deadline, too many bytes, or a decompression limit. Do not call `response.text()` on an unbounded response and hope the provider behaves.',
+				],
+				bullets: ['Use one overall deadline plus a smaller connect/read policy where your client supports it', 'Allow only a small, explicit redirect count and validate every Location', 'Cap compressed and decompressed payloads separately when decompression is enabled', 'Accept only content types your extractor understands; reject executable and archive formats by default', 'Do not retry a blocked destination or a non-idempotent downstream action automatically'],
+			},
+			{
+				heading: 'Separate retrieval from extraction and model input',
+				paragraphs: [
+					'Retrieving bytes is not the same as producing trustworthy context. HTML can contain navigation, scripts, hidden text, prompt injection, tracking URLs, and instructions aimed at the model. Strip active content, bound the extracted text, preserve the source URL as metadata, and label the result as untrusted reference material. The model must not treat retrieved instructions as system policy or as permission to call another tool.',
+					'Keep the extractor’s output schema small: normalized source, fetch timestamp, media type, title if available, text, truncation status, and a content hash or document ID. Do not pass response headers, cookies, internal error messages, or raw redirect chains into a prompt unless a specific reviewed use case requires them. If the workflow performs an action based on the content, require a separate validation and approval step.',
+				],
+				bullets: ['Use an HTML parser or proven extraction component rather than regular expressions for document structure', 'Remove scripts, forms, embeds, and active navigation before model processing', 'Mark text as untrusted and delimit it clearly in the model input', 'Keep model context limits separate from network and storage limits', 'Require human approval for financial, account, deletion, or publication actions derived from fetched content'],
+			},
+			{
+				heading: 'Verify the boundary with an adversarial test matrix',
+				paragraphs: [
+					'Test the fetcher with a local fixture server and a controlled DNS or network test environment. Include valid HTTPS, malformed URLs, userinfo, non-default ports, redirects, redirect loops, redirect to loopback, IPv4 and IPv6 private addresses, slow headers, slow bodies, chunked responses, oversized content, unsupported media types, compressed payloads, and connection resets. Assert that blocked cases never reach the protected destination.',
+					'Test the AI boundary separately. Put fake instructions in a fetched page, attempt to make the model reveal its system prompt or call a privileged tool, and verify that the orchestration layer treats the page as data. Test duplicate jobs, cache poisoning, tenant authorization, cancellation, worker restart, and provider outage. A successful fetch is not a successful workflow; the result also needs provenance, bounded cost, and a safe failure state.',
+				],
+				bullets: ['Every redirect is revalidated and the maximum hop count is enforced', 'A timeout or byte limit releases resources and does not leave a worker stuck', 'Private and link-local destinations are blocked at the network layer as well as in code', 'The extractor cannot pass scripts or hidden instructions as trusted policy', 'Tenant A cannot use a cached document or allowlist entry belonging to tenant B', 'Metrics cover allowed, blocked, redirected, timed out, oversized, and extracted outcomes without raw URLs'],
+			},
+			{
+				heading: 'Production checklist and trade-offs',
+				paragraphs: [
+					'Application checks and network controls reinforce each other. Put the worker in an egress-restricted environment, use a dedicated identity, block access to cloud metadata and internal administration services, and keep secrets unavailable to the process when possible. If the product needs partner access, explicit egress rules and an allowlist are easier to audit than trying to prove that every public IP is safe forever.',
+					'Caching can reduce cost and repeated requests, but cache keys must include the normalized URL and authorization context, and cached content needs an expiry and invalidation policy. Record enough evidence to investigate a run—policy decision, destination class, status, byte count, duration, extractor result, and model cost—without storing credentials or sensitive page content by default. The best URL fetcher is intentionally boring: narrow inputs, bounded work, visible decisions, and no path from retrieved text to authority.',
+				],
+				bullets: ['The URL policy, supported content types, and limits are documented', 'Worker egress cannot reach internal control-plane or metadata addresses', 'Redirect, DNS, IPv6, proxy, and decompression behavior are tested', 'Response and extraction limits protect memory, storage, and model context', 'Retrieved content is untrusted and cannot authorize tools or business actions', 'Cache isolation, retention, redaction, and tenant boundaries are explicit', 'A kill switch can disable remote fetching without disabling the rest of the product'],
+			},
+		],
+	},
 ];

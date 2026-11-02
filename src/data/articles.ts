@@ -21,6 +21,111 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'build-abstaining-ai-classification-queue',
+		title: 'How to Build an AI Classification Queue That Knows When to Abstain',
+		seoTitle: 'Build an AI Classification Queue That Can Abstain | PilotLab',
+		dek: 'Turn model output into a reviewable workflow: constrain the result, validate it in code, route uncertainty to humans, and measure the decisions that matter.',
+		published: '2026-11-02',
+		updated: '2026-11-02',
+		readTime: '10 min read',
+		category: 'AI integration and workflow automation',
+		keyword: 'how to build an AI classification queue with human review',
+		intro: 'An AI classifier should not be forced to choose when the input is ambiguous, incomplete, or outside the task it was built for. A safer pattern is a bounded proposal pipeline: the model returns a small structured result, application code validates and enriches it, and an abstention or risk rule sends uncertain cases to a review queue. This tutorial shows how to design that boundary for a support-ticket router or similar workflow, without treating a valid JSON response as proof that the decision is correct.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'OpenAI — Structured model outputs', url: 'https://platform.openai.com/docs/guides/structured-outputs' },
+			{ label: 'JSON Schema — Objects and additional properties', url: 'https://json-schema.org/understanding-json-schema/reference/object' },
+			{ label: 'OWASP — GenAI Security Project and LLM Top 10', url: 'https://genai.owasp.org/llm-top-10/' },
+		],
+		sections: [
+			{
+				heading: 'Define a decision contract with a safe third outcome',
+				paragraphs: [
+					'Start with a narrow operational decision, not a general request to “understand” the ticket. For example, a support workflow may route a message to billing, account access, technical issue, or human review. The output must also explain what evidence is missing and whether the proposed route is safe to automate. If every input must receive one of the first three labels, the system will turn uncertainty into a confident-looking queue assignment.',
+					'Treat `abstain` as a first-class result. It is not a model failure: it is the correct outcome when the input is outside the classifier’s scope, the evidence is contradictory, or the requested action has higher impact than the available evidence. Define the automation boundary with the workflow owner and keep authorization, tenant scope, and customer priority outside the model’s control.',
+				],
+				bullets: [
+					'Use a small enum of allowed categories plus `abstain`; do not accept arbitrary queue names',
+					'Define which categories may auto-route and which always require review',
+					'Require a short evidence summary and a list of missing fields',
+					'Keep customer identity, permissions, SLA, and routing policy in application data',
+					'Set a maximum input size and a clear behavior for empty or unsupported content',
+				],
+			},
+			{
+				heading: 'Constrain the model response, then validate it yourself',
+				paragraphs: [
+					'Use structured outputs or an equivalent provider feature to ask for a defined object rather than parsing prose with regular expressions. OpenAI documents structured model outputs as a way to make responses conform to a supplied schema. That improves the transport contract, but it does not establish that the classification is true, relevant, authorized, or safe. The model can produce a perfectly shaped wrong answer.',
+					'Define required properties, bounded strings, enums, and arrays with maximum lengths. JSON Schema allows additional properties by default, so disallow fields your application does not understand when the provider and validator support that rule. Parse the returned JSON, validate it with a pinned schema library, and reject refusals, incomplete responses, oversized evidence, and unknown categories before creating a queue item.',
+				],
+				bullets: [
+					"type Classification = { category: 'billing' | 'account' | 'technical' | 'abstain'; rationale: string; missingFields: string[]; riskFlags: string[] };",
+					'Keep the schema version in the proposal record so later workers can interpret old items correctly',
+					'Clamp rationale and list lengths before storage and before displaying them to reviewers',
+					'Validate the schema in the worker even if the API already validated the response',
+					'Never use a free-form model field as a database table, URL, tool, or permission selector',
+				],
+			},
+			{
+				heading: 'Make abstention a policy decision in application code',
+				paragraphs: [
+					'Do not ask the model to enforce the complete business policy by itself. After validation, apply deterministic checks: is the category allowed for this tenant, does the source contain the required fields, is the requested action reversible, and is the proposal still inside the automation boundary? A numeric confidence value can be logged as a feature for evaluation, but it should not be treated as a calibrated probability or a permission grant without task-specific evidence.',
+					'Use a simple decision function with explicit reasons. For example, an account-access ticket missing an authenticated customer reference should abstain even if the model selected `account`. A billing ticket mentioning a refund should enter review rather than silently triggering a financial action. The policy should be versioned separately from the prompt so an operator can change the risk boundary without pretending the model changed.',
+				],
+				bullets: [
+					'Route invalid output, provider refusal, timeout, and unsupported input to a visible failure state',
+					'Route high-impact categories to review regardless of the model’s proposed confidence',
+					'Apply tenant and actor authorization after loading current system-of-record data',
+					'Return a typed outcome such as `auto_route`, `review`, or `rejected` to the queue worker',
+					'Keep policy version, prompt version, model identifier, and schema version on each proposal',
+				],
+			},
+			{
+				heading: 'Create a queue item that a reviewer can actually decide',
+				paragraphs: [
+					'A review queue is part of the product, not an exception mailbox. Store the source reference, a redacted input snapshot or retrieval pointer, the proposed category, rationale, missing fields, risk flags, policy result, and expiration time. Show the reviewer the evidence used for the proposal and the exact effect of approval. Do not display a model rationale as if it were a verified explanation; label it as a proposal and let the reviewer inspect the source.',
+					'Give reviewers approve, reject, and edit-and-approve paths only where each has a defined audit meaning. On approval, reload the current record and re-run authorization and policy checks. A proposal can become stale while waiting in the queue, and the person who opens it may not be allowed to apply the same decision. Use a compare-and-set transition so only one terminal decision wins.',
+				],
+				bullets: [
+					'Use states such as `proposed`, `in_review`, `approved`, `rejected`, `expired`, and `executed`',
+					'Lease or assign work so two reviewers can see who is actively handling it',
+					'Require a fresh authorization check at approval and execution, not only at creation',
+					'Keep reviewer edits separate from the original model proposal',
+					'Use an idempotency key for execution and record the result of every attempt',
+				],
+			},
+			{
+				heading: 'Defend the boundary against untrusted content',
+				paragraphs: [
+					'Ticket text, email bodies, uploaded documents, and retrieved pages are input data. They may contain instructions aimed at the model, such as requests to reveal a system prompt or change the routing policy. OWASP treats prompt injection and excessive agency as application security concerns; the durable defense is to keep the allowed action set and authorization in code. A sentence inside a ticket cannot approve a route, reveal a secret, or grant access to another tenant.',
+					'Keep the classifier’s tools narrow or give it no tools at all. If it needs customer or order context, retrieve only the fields required for the classification and mark them as untrusted evidence. Redact secrets before the model call, limit output and input sizes, and ensure logs and reviewer screens do not copy credentials or unnecessary personal data. A review step reduces risk but does not excuse a dangerous executor.',
+				],
+				bullets: [
+					'Never let model output select arbitrary tools, SQL, URLs, credentials, or tenant IDs',
+					'Keep side effects in a separately authorized executor with narrow inputs',
+					'Test instruction-like text in tickets, documents, retrieval results, and tool responses',
+					'Use least-privilege credentials and bounded timeouts for every downstream action',
+					'Log blocked attempts and policy decisions without retaining raw sensitive content by default',
+				],
+			},
+			{
+				heading: 'Verify quality with replayable cases and production signals',
+				paragraphs: [
+					'Build a versioned test set from representative tickets: clear cases, ambiguous language, missing fields, multilingual input if supported, adversarial instructions, duplicates, and cases that must abstain. Assert deterministic properties such as valid schema, allowed category, tenant isolation, no side effect on abstention, and one execution for a repeated approval. Have a domain owner review the expected route and abstention decision; a parser test cannot measure usefulness.',
+					'Replay the set whenever the prompt, model, schema, policy, retrieval source, or executor changes. In production, measure category distribution, abstention rate, reviewer edits, approval latency, rejection rate, stale proposals, execution failures, duplicate attempts, and sampled correctness. A falling abstention rate is not automatically an improvement: it may mean the system is forcing guesses. Compare speed with corrections and downstream outcomes before widening automation.',
+				],
+				bullets: [
+					'Invalid, refused, timed-out, and oversized model responses create no unauthorized action',
+					'Abstention creates a review item with enough evidence to resolve the case',
+					'Changing source data after proposal creation forces re-evaluation or safe rejection',
+					'Concurrent approvals produce one terminal state and one business effect',
+					'Prompt-injection fixtures cannot expand the action set or cross a tenant boundary',
+					'Operators can disable auto-routing while preserving queue intake and audit history',
+				],
+			},
+		],
+	},
+	{
 		slug: 'coordinate-multi-tab-web-app-with-web-locks',
 		title: 'How to Coordinate a Multi-Tab Web App with the Web Locks API',
 		seoTitle: 'Coordinate Multi-Tab Web Apps with Web Locks | PilotLab',

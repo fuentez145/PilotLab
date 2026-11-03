@@ -21,6 +21,80 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'use-http-103-early-hints-web-performance',
+		title: 'How to Use HTTP 103 Early Hints for Web Performance',
+		seoTitle: 'Use HTTP 103 Early Hints for Web Performance | PilotLab',
+		dek: 'Start fetching a page’s critical resources while the origin is still working—without guessing blindly, wasting bandwidth, or trusting a proxy you have not tested.',
+		published: '2026-11-03',
+		updated: '2026-11-03',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to use HTTP 103 Early Hints',
+		intro: 'A slow origin response creates a quiet period in which the browser knows it will probably need a stylesheet, font, or critical script but cannot see those links yet. HTTP 103 Early Hints lets a server send provisional Link headers before the final response is ready. This tutorial shows how to choose safe hints, add them at the edge or origin, verify that they survive the real delivery path, and decide when ordinary HTML preload or a faster backend is the better fix.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'MDN — 103 Early Hints', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/103' },
+			{ label: 'RFC 8297 — An HTTP Status Code for Indicating Hints', url: 'https://www.rfc-editor.org/rfc/rfc8297' },
+			{ label: 'MDN — Link header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Link' },
+			{ label: 'MDN — rel=preload', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload' },
+		],
+		sections: [
+			{
+				heading: 'Understand what 103 does—and what it does not do',
+				paragraphs: [
+					'103 is an informational response sent while the server is preparing the final response. Its usual payload is a Link header such as `Link: </assets/app.css>; rel=preload; as=style`. A browser may begin preparing or fetching that resource before the final HTML arrives. The final response still needs its own correct Link or HTML reference; an early hint is a prediction, not the resource contract.',
+					'RFC 8297 describes the status as a performance optimization. It must not change authorization, routing, or the meaning of the final response. If the request becomes a redirect, an error, or a page that does not use the hinted resource, the client can discard the speculative work. That makes accuracy and cacheability more important than sending a long list of “probably useful” assets.',
+				],
+				bullets: ['Use it to overlap origin work with a fetch the page is very likely to need', 'Keep the final response authoritative for headers, security policy, and representation', 'Do not use it to bypass authentication or expose a resource the final response would not permit', 'Treat an unused hint as wasted connection, bandwidth, and cache capacity', 'Prefer HTTP/2 or later unless the client and delivery path are known to handle informational responses safely'],
+			},
+			{
+				heading: 'Choose one critical, stable resource first',
+				paragraphs: [
+					'Start with a resource whose URL, content type, and need are stable across the page variant: usually a render-blocking stylesheet or a small critical font when the font is genuinely required for the initial layout. Do not hint every JavaScript chunk, below-the-fold image, analytics script, or personalized asset. A hint is valuable only when it moves useful work earlier than the normal HTML discovery path.',
+					'Preload matching is strict enough to make mistakes visible. The `as` value should describe the fetched destination, and a cross-origin font normally needs the same CORS mode as the eventual request. Keep URLs versioned and immutable where possible. If a cookie, locale, tenant, experiment, or authorization decision changes the resource, confirm that the edge can vary and cache it correctly before hinting it.',
+				],
+				bullets: ['Record the candidate URL, `rel`, `as`, and `crossorigin` values as one tested tuple', 'Hint only assets needed by most responses in the route class', 'Use immutable, fingerprinted URLs so speculative bytes can be reused safely', 'Exclude resources already guaranteed to be in the browser cache when the edge can know that', 'Start with one hint and compare it against the page’s critical request chain'],
+			},
+			{
+				heading: 'Add the hint at the earliest trustworthy boundary',
+				paragraphs: [
+					'An origin can emit a 103 before it finishes server rendering, but many teams will add it at a reverse proxy or CDN that knows the route’s stable assets. The boundary must be able to send the informational response before the final headers and must preserve the Link header through the HTTP version and proxy chain. A configuration that looks correct at localhost can be inert if an intermediary buffers or removes 103 responses.',
+					'Use a route-specific rule rather than a global “preload the app” rule. Keep the final HTML and early response consistent, and do not send a hint before the server has enough information to know the resource is appropriate. If the page can return a login screen, an error, or a different tenant theme, either vary the hint with that decision or omit it. Sending no hint is safer than speculatively fetching another customer’s asset.',
+				],
+				bullets: [
+					'Illustrative wire shape: `HTTP/2 103` followed by `Link: </assets/site.abc123.css>; rel=preload; as=style`',
+					'Emit a matching final `Link` or HTML reference so the browser can reuse the preload',
+					'Configure the CDN, reverse proxy, origin, and TLS termination as one delivery path',
+					'Keep the rule versioned with the asset manifest and route templates',
+					'Never include secrets, signed URLs with excessive lifetime, or user-controlled header values in a hint'],
+			},
+			{
+				heading: 'Protect correctness, CSP, and cache behavior',
+				paragraphs: [
+					'MDN documents Link as the primary header used by Early Hints and notes that a 103 may also carry a Content-Security-Policy header. Treat that as a security-sensitive feature, not a way to repair a late final CSP. The policy that governs speculative fetching must be deliberate, and the final response must still enforce the policy you intend. Test what happens when the final response rejects or changes the hinted resource.',
+					'Caching needs the same care as ordinary preload. A shared cache must not reuse a personalized hint for another response, and an asset URL must not embed credentials or tenant data. If a hint is generated from cookies or authorization, make that variation explicit or keep the hint private. When the asset changes, fingerprinting and a matching cache invalidation strategy prevent a client from combining stale speculative work with a new document.',
+				],
+				bullets: ['Keep the hinted origin and resource within the intended CSP and CORS policy', 'Test same-origin and cross-origin fonts separately', 'Do not vary a shared cached 103 on an input the cache does not understand', 'Use response and asset validators consistently', 'Log the route class and asset identifier, not sensitive request headers or full URLs'],
+			},
+			{
+				heading: 'Verify the complete path with network evidence',
+				paragraphs: [
+					'Use a controlled endpoint that delays the final response long enough for the hint to matter. Request it with a client that exposes informational responses, inspect browser DevTools for the 103 and the resource request, and compare the waterfall with the same page without the hint. `curl -I` alone is not sufficient: it may not show browser reuse, HTTP version behavior, cache state, or whether the proxy buffered the response.',
+					'Repeat the test through the public hostname, TLS terminator, CDN, compression layer, and any authenticated route that will use the rule. Test a warm cache, cold cache, slow origin, redirect, 404, server error, disabled JavaScript, and a browser without Early Hints support. Measure the critical request start and usable render—not just whether a 103 appeared. A visible 103 with no earlier useful fetch is a configuration fact, not a performance win.',
+				],
+				bullets: ['The public response shows 103 before the final status on a supported protocol', 'The hinted request starts before final HTML arrives and is reused rather than duplicated', 'The final response still contains the correct resource reference and security headers', 'A route variant never receives an asset it cannot use or access', 'Unsupported clients keep the normal HTML discovery path', 'Resource waste, cache hit rate, LCP, and origin timing are compared before rollout'],
+			},
+			{
+				heading: 'Know when to remove it or choose another fix',
+				paragraphs: [
+					'Early Hints cannot compensate for an oversized stylesheet, a slow database query, an origin that waits unnecessarily, or a poor critical rendering path. If the final HTML is already fast, the browser already has the asset, or the hint is frequently wrong, the extra complexity is not justified. Fix the asset and server bottleneck first when that produces a clearer and broader improvement.',
+					'Roll out one route class and one stable asset at a time. Keep a kill switch at the edge, watch speculative bytes and error rates, and remove hints that do not improve user-visible timings. Browser support and intermediary behavior vary; MDN recommends HTTP/2 or later for compatibility and security reasons. Progressive enhancement is the right posture: the page must remain correct when 103 is ignored.',
+				],
+				bullets: ['Use ordinary HTML preload when early server knowledge adds no value', 'Use preconnect sparingly for a truly necessary cross-origin connection', 'Fix origin latency, render-blocking CSS, fonts, and image dimensions before tuning hints', 'Keep a per-route budget for speculative requests and bytes', 'Document the removal condition: no measured benefit, high waste, or fragile cache behavior'],
+			},
+		],
+	},
+	{
 		slug: 'build-abstaining-ai-classification-queue',
 		title: 'How to Build an AI Classification Queue That Knows When to Abstain',
 		seoTitle: 'Build an AI Classification Queue That Can Abstain | PilotLab',

@@ -21,6 +21,101 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'use-webtransport-realtime-browser-apps',
+		title: 'How to Use WebTransport for Realtime Browser Apps',
+		seoTitle: 'Use WebTransport for Realtime Browser Apps | PilotLab',
+		dek: 'Choose reliable streams or lossy datagrams for the right job, authenticate the session, keep a WebSocket fallback, and verify HTTP/3 behavior before putting WebTransport in a product.',
+		published: '2026-11-04',
+		updated: '2026-11-04',
+		readTime: '10 min read',
+		category: 'Web application engineering',
+		keyword: 'how to use WebTransport for realtime browser apps',
+		intro: 'WebSockets are still the sensible default for many realtime features, but some browser applications need more deliberate transport choices: independent reliable streams, low-latency updates that may be dropped, or better behavior when a device changes networks. WebTransport exposes HTTP/3-based sessions with both stream and datagram APIs. This tutorial shows how to evaluate it without treating a new transport as a product feature by itself: define delivery semantics, connect only over HTTPS, authenticate at the application layer, preserve a fallback, and test the complete network path.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'MDN — WebTransport API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebTransport_API' },
+			{ label: 'MDN — WebTransport() constructor', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport' },
+			{ label: 'MDN — WebTransport datagrams', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/datagrams' },
+			{ label: 'IETF RFC 9114 — HTTP/3', url: 'https://www.rfc-editor.org/rfc/rfc9114' },
+			{ label: 'Chrome for Developers — How to use WebTransport', url: 'https://developer.chrome.com/docs/capabilities/web-apis/webtransport' },
+		],
+		sections: [
+			{
+				heading: 'Decide whether WebTransport fits the interaction',
+				paragraphs: [
+					'WebTransport is a browser API for communicating with an HTTP/3 server. It can expose multiple bidirectional or unidirectional streams and an unreliable datagram channel within one session. That is a different contract from a single ordered WebSocket message stream. The benefit is control over delivery semantics; the cost is an HTTP/3-capable server, more involved operations, and a fallback for clients or networks that cannot establish the session.',
+					'Start with the interaction, not the protocol. A collaborative editor needs reliable ordered operations and conflict handling. A live dashboard may use reliable streams for snapshots and lossy updates for transient values. A game-like cursor or presence indicator can discard old state, while an authorization change, payment event, or job completion must never use an unreliable channel. If every message must arrive in order, WebSocket or ordinary HTTPS may be the simpler choice.',
+				],
+				bullets: ['Use reliable streams for commands, snapshots, and state transitions', 'Use datagrams only for replaceable updates where loss and reordering are safe', 'Keep durable state in the server or database, not in transport delivery', 'Compare WebTransport with WebSocket, polling, and WebRTC against the actual requirement', 'Define the fallback before measuring a prototype'],
+			},
+			{
+				heading: 'Connect over HTTPS and treat readiness as asynchronous',
+				paragraphs: [
+					'MDN documents WebTransport as secure-context-only: the browser needs an HTTPS URL, and the port must be explicit. Constructing the object does not mean that a session is ready. Await `transport.ready` before opening streams or writing data, and handle rejection as a normal connection outcome rather than leaving the interface in a permanent “connecting” state.',
+					'Keep the endpoint separate from the message protocol. A route such as `/realtime` identifies the transport entry point; an application protocol version, message type, request ID, and payload schema identify what travels through it. The server must validate the browser Origin and the authenticated user or session before accepting application work. A successful HTTP/3 session is not proof that the caller may read another tenant’s data.',
+				],
+				bullets: [
+					"const transport = new WebTransport('https://realtime.example.com:443/realtime');",
+					'Await `transport.ready` and start readers only after the promise fulfills',
+					'Use a browser-trusted certificate and test the exact public hostname, not only localhost',
+					'Authenticate with a short-lived, scoped application credential or a server-established session',
+					'Validate Origin, tenant scope, protocol version, message size, and authorization on the server',
+				],
+			},
+			{
+				heading: 'Use reliable streams for state and commands',
+				paragraphs: [
+					'Reliable streams are the safer starting point for most product features. A stream gives you a byte-oriented readable and writable side; your application protocol still needs framing. A practical frame can contain a length, version, type, request ID, and encoded payload. Use a bounded decoder that rejects frames larger than the feature’s limit before allocating memory, and make every command idempotent or deduplicated when a reconnect can repeat it.',
+					'One session can carry independent streams, so a slow transfer need not share one application-level queue with a small control message. Do not assume that “reliable” means “the business operation happened exactly once.” The client can disconnect after the server commits an operation but before the acknowledgement arrives. Persist an operation ID and let the client reconcile its status after reconnecting.',
+				],
+				bullets: [
+					"const stream = await transport.createBidirectionalStream();",
+					'Use `stream.readable` and `stream.writable` with the Web Streams APIs',
+					'Encode explicit frames instead of concatenating JSON objects with an ambiguous delimiter',
+					'Bound frame size, per-session streams, outstanding requests, and decode time',
+					'Include an operation ID and replay or reconcile commands after reconnect',
+					'Close or cancel readers and writers when the session closes so pending work is observable',
+				],
+			},
+			{
+				heading: 'Reserve datagrams for disposable state',
+				paragraphs: [
+					'MDN describes WebTransport datagrams as unreliable: delivery is not guaranteed and arrival order is not guaranteed. That is useful when each update supersedes the previous one, such as a cursor position, rapidly changing telemetry sample, or ephemeral presence hint. It is not a faster version of a reliable command channel. If the receiver must see every event, use a stream or a durable API instead.',
+					'Give datagrams their own small schema and sequence number. The receiver can discard a packet with an old sequence, reject an oversized payload, and request a fresh snapshot over a reliable stream when its state is stale. The sender should tolerate backpressure and a full datagram queue; dropping an old replaceable update is safer than building unbounded memory pressure. Never put secrets or irreversible actions in a datagram that the application cannot confirm.',
+				],
+				bullets: [
+					"const writer = transport.datagrams.writable.getWriter(); await writer.write(encodePresenceUpdate(state));",
+					'Prefer the current datagram API supported by the target browsers and feature-detect older implementations',
+					'Keep datagrams small and bounded by the server, client, and path limits',
+					'Attach a monotonic sequence or timestamp and ignore stale updates',
+					'Use reliable resynchronization rather than trying to repair missing datagrams individually',
+				],
+			},
+			{
+				heading: 'Design reconnect and fallback as part of the protocol',
+				paragraphs: [
+					'HTTP/3 availability is not universal across every browser, embedded webview, proxy, corporate network, or hosting setup. Feature-detect `WebTransport`, attempt the connection with a timeout, and fall back to a WebSocket or HTTPS polling path that implements the same business semantics. Do not expose two subtly different authorization rules or state machines just because the transports differ. The transport adapter should map both paths to the same typed events and commands.',
+					'On close, use bounded exponential backoff with jitter and a maximum retry window. Refresh an expired credential before reconnecting, but do not retry an authorization denial forever. After reconnect, request a server snapshot or resume from a server-owned cursor; do not assume that messages missed during the gap can be reconstructed from a client timer. Show stale state in the UI and provide a deliberate degraded mode for features that cannot continue offline.',
+				],
+				bullets: [
+					"if ('WebTransport' in window) { /* attempt the HTTP/3 path */ } else { /* use the WebSocket adapter */ }",
+					'Use one typed domain protocol behind both transport adapters',
+					'Apply connection, handshake, idle, and retry timeouts independently',
+					'Use jittered backoff and stop retrying on authentication or policy errors',
+					'Reconcile with a snapshot or cursor after every reconnect',
+				],
+			},
+			{
+				heading: 'Verify the public path and failure modes',
+				paragraphs: [
+					'Build a small test endpoint before moving a core workflow. Open a session from the supported browsers, await readiness, send one framed reliable message, receive a response, and close cleanly. Then test a replaceable datagram stream by sending sequence numbers and deliberately accepting that some updates may not arrive. Confirm that the server applies Origin and authorization checks before creating a session and that oversized or malformed frames are rejected without taking down the process.',
+					'Test through the real TLS terminator, HTTP/3 listener, load balancer, firewall, and hostname. Exercise an unavailable HTTP/3 path, a slow handshake, a dropped connection during a command, a token expiry, two tabs, a mobile network change, a stalled reader, rapid datagrams, and a server restart. Compare connection success, time to ready, reconnect rate, dropped datagrams, stream errors, memory, and fallback usage. A demo that works on one desktop browser is not evidence that the feature is production-ready.',
+				],
+				bullets: ['Unsupported clients reach the tested fallback without a broken loading state', 'A reconnect cannot duplicate an irreversible operation', 'A dropped reliable response is recoverable through status lookup or snapshot', 'Old datagrams are ignored and missing state can be refreshed reliably', 'Origin, authentication, tenant isolation, and message limits are tested', 'HTTP/3, TLS, proxy, idle timeout, and load-balancing behavior match production', 'Operators can see readiness failures, close reasons, fallback use, and resource pressure', 'The feature has a rollback switch that returns users to the stable transport'],
+			},
+		],
+	},
+	{
 		slug: 'use-http-103-early-hints-web-performance',
 		title: 'How to Use HTTP 103 Early Hints for Web Performance',
 		seoTitle: 'Use HTTP 103 Early Hints for Web Performance | PilotLab',

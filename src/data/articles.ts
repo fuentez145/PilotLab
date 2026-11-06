@@ -21,6 +21,81 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'handle-http-425-too-early-api-safely',
+		title: 'How to Handle HTTP 425 Too Early Safely in an API',
+		seoTitle: 'Handle HTTP 425 Too Early Safely in an API | PilotLab',
+		dek: 'Use HTTP 425 as a deliberate replay-protection boundary for TLS early data: identify the risk, reject only what needs rejection, and make the retry contract explicit.',
+		published: '2026-11-06',
+		updated: '2026-11-06',
+		readTime: '8 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to handle HTTP 425 Too Early in an API',
+		intro: 'TLS 1.3 early data, also called 0-RTT, can reduce a connection’s first request latency, but it introduces a replay risk that ordinary HTTPS request handling does not remove. HTTP 425 Too Early gives a server a standard way to decline processing when a request may have arrived in early data. This guide shows how to make that decision at the edge and application layers, how to avoid retrying unsafe writes blindly, and how to verify the behavior without assuming that a 425 response means the request was harmlessly discarded.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'RFC 8470 — Using Early Data in HTTP', url: 'https://www.rfc-editor.org/rfc/rfc8470' },
+			{ label: 'MDN — 425 Too Early', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/425' },
+			{ label: 'RFC 8446 — The TLS Protocol Version 1.3', url: 'https://www.rfc-editor.org/rfc/rfc8446' },
+			{ label: 'RFC 9110 — HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110' },
+		],
+		sections: [
+			{
+				heading: 'Understand the problem before enabling early data',
+				paragraphs: [
+					'TLS 1.3 0-RTT lets a client that recently connected to a server send application data before the handshake fully completes. That can save a round trip, but the early data can be replayed by an attacker. The risk is not the same as a normal client retry: an attacker can repeat the request without the client knowing, so a server must not treat a successful TLS handshake as proof that the request was delivered exactly once.',
+					'Begin with an inventory of endpoints that can change state. Payments, account changes, reservations, password operations, job creation, and any request that triggers an external side effect should be treated as replay-sensitive unless the complete operation is designed to tolerate duplicates. Read-only requests may still have privacy or cost implications, so classify them deliberately rather than allowing every GET by default.',
+				],
+				bullets: ['Find where TLS terminates: CDN, load balancer, reverse proxy, or application', 'Determine whether that boundary accepts and forwards early data', 'List endpoints whose side effects cannot safely happen twice', 'Keep ordinary retries and attacker-controlled replays in separate threat models', 'Do not enable 0-RTT for an API merely because the handshake benchmark improved'],
+			},
+			{
+				heading: 'Choose a server policy: reject, delay, or make the operation replay-safe',
+				paragraphs: [
+					'RFC 8470 describes three useful server strategies: reject early data at the TLS layer, delay processing until the handshake completes, or decide per request. A gateway can use the `Early-Data` request header as a signal when early data reached HTTP, but the application must understand what the proxy actually guarantees. If the edge cannot reliably distinguish early data, the safest policy for sensitive routes is to disable it for that listener or route.',
+					'HTTP 425 is the explicit per-request response for a server unwilling to risk processing a possibly replayed request. Return it before the side effect starts, with a response body or problem detail that tells a capable client to retry after the handshake. Do not use 425 as a generic overload response, and do not return it after committing the business operation: at that point the client needs the operation’s real result or a status-reconciliation path.',
+				],
+				bullets: ['Reject at the TLS or proxy layer when the whole service cannot safely accept early data', 'Delay processing when the infrastructure can buffer safely and the latency trade-off is acceptable', 'Return 425 before side effects for a route that can identify early data', 'Use a normal domain response after a completed operation, never 425 as an ambiguous post-commit error', 'Document whether the policy is route-specific, tenant-specific, or listener-wide'],
+			},
+			{
+				heading: 'Make the retry contract safe for clients',
+				paragraphs: [
+					'A client that receives 425 should retry only after it has left early-data mode. The server cannot assume that every HTTP client understands this status, and a generic retry library may repeat an unsafe request immediately or retry it several times. Treat 425 as a distinct classification in the client and gateway policy, not as an interchangeable 408 or 503.',
+					'For a safe or idempotent operation, a bounded retry can be reasonable. For a state-changing operation, require an application-level idempotency key or a durable operation identifier and make the server store the result or a safe replay decision before performing the side effect. Even then, idempotency protects the business operation; it does not make secrets, authorization, or an entire workflow automatically safe to replay. Revalidate credentials and current resource state on the retry.',
+				],
+				bullets: [
+					"if (response.status === 425) { return retryAfterHandshake(request); }",
+					'Never let a generic retry wrapper repeat a non-idempotent request merely because it received 425',
+					'Preserve the same operation or idempotency key across an intentional retry',
+					'Use bounded backoff and stop on authentication, policy, or validation errors',
+					'Expose an unknown outcome when a network failure occurs after a possible commit',
+				],
+			},
+			{
+				heading: 'Keep the edge and application decisions consistent',
+				paragraphs: [
+					'The most dangerous deployment is one in which the CDN, reverse proxy, and origin disagree. An edge may accept early data while an origin assumes it never sees it; a proxy may strip `Early-Data`; or a retrying intermediary may hide the original response. Document the signal and trust boundary, then test the exact public path. A header arriving at the origin is evidence about the path, not an authorization credential supplied by the caller.',
+					'Put replay-sensitive routing close to the component that can enforce it, but keep the final business invariant in application and database code. The API should still authenticate, authorize, validate, and apply an atomic idempotency or operation record. A proxy rule is useful defense in depth; it is not a substitute for a transaction, unique constraint, or side-effect reconciliation.',
+				],
+				bullets: ['Define which component terminates TLS and which component makes the early-data decision', 'Allow only a controlled proxy to set or forward early-data metadata', 'Do not trust a client-supplied header as proof of TLS state', 'Apply authorization and tenant checks again on the retry', 'Log route, policy decision, response status, and operation ID without request secrets'],
+			},
+			{
+				heading: 'Test replay protection without claiming exactly-once delivery',
+				paragraphs: [
+					'Build a test endpoint with a visible side effect in a disposable database or queue. Exercise a request that the edge marks as early data and assert that the protected route returns 425 before creating the record. Then repeat the request after the handshake and verify one successful operation. Test an idempotency-keyed write twice and confirm one business result, not merely two identical HTTP bodies.',
+					'Include the failure that teams often miss: let the server commit, then delay or drop the response. The client must reconcile the operation rather than infer that it is safe to create a second one. Also test a proxy that removes the signal, a client that does not understand 425, a redirect, an expired credential, a malformed idempotency key, concurrent retries, and a process restart. The goal is bounded, explainable behavior—not a claim that the network can deliver exactly once.',
+				],
+				bullets: ['Sensitive early-data requests are rejected or delayed before side effects', 'Safe retries leave the same operation result and do not multiply work', 'A completed write followed by a lost response is reconciled by operation ID', 'A 425 is not retried forever and is not confused with overload', 'Proxy, TLS terminator, origin, and client behavior are tested together', 'Metrics distinguish early-data rejections, retries, duplicate attempts, and committed operations'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'MDN currently marks 425 as having limited browser availability, so this is primarily an API, native-client, and infrastructure concern rather than a browser feature to expose directly. A service can remain correct without 0-RTT by disabling early data; the optimization is optional, while replay safety is not. Start with the narrowest listener or route and keep a rollback switch at the TLS or edge layer.',
+					'Use 425 when it communicates a real early-data decision. If the actual problem is a slow dependency, overload, or a request that is still being processed asynchronously, use the status and operation contract that describes that condition. Measure handshake latency against rejected requests, retries, duplicate prevention, and operational complexity. Removing 0-RTT is often the right answer for a small API whose clients do not need the saved round trip.',
+				],
+				bullets: ['The early-data policy is written down and owned by the platform team', 'Sensitive routes are safe when early data is disabled, stripped, or misclassified', 'Clients classify 425 separately from 5xx and honor a bounded retry policy', 'Business writes have idempotency or reconciliation independent of transport', 'Dashboards show rejection, retry, duplicate, and unknown-outcome rates', 'A one-change rollback can disable early data without changing business routes'],
+			},
+		],
+	},
+	{
 		slug: 'use-webtransport-realtime-browser-apps',
 		title: 'How to Use WebTransport for Realtime Browser Apps',
 		seoTitle: 'Use WebTransport for Realtime Browser Apps | PilotLab',

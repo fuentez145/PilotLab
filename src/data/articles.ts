@@ -6847,4 +6847,90 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'instrument-nodejs-with-diagnostics-channel',
+		title: 'How to Instrument Node.js Libraries with diagnostics_channel',
+		seoTitle: 'Instrument Node.js Libraries with diagnostics_channel | PilotLab',
+		dek: 'Publish useful internal events without coupling application code to an observability vendor—then add subscribers, context, redaction, and tests at the boundary.',
+		published: '2026-11-08',
+		updated: '2026-11-08',
+		readTime: '9 min read',
+		category: 'Platform engineering',
+		keyword: 'how to use diagnostics_channel in Node.js',
+		intro: 'A shared Node.js library often knows when a meaningful operation starts and ends, but it should not import your logging backend, tracing SDK, or application framework just to report that fact. Node’s `diagnostics_channel` module provides a named publish-and-subscribe boundary for diagnostic events. This tutorial builds a small request-operation channel, preserves request context with `AsyncLocalStorage`, and shows how to keep instrumentation optional, safe, and testable. It is an instrumentation seam—not a replacement for metrics, traces, or an audit log.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'Node.js — Diagnostics Channel', url: 'https://nodejs.org/api/diagnostics_channel.html' },
+			{ label: 'Node.js — Asynchronous context tracking', url: 'https://nodejs.org/api/async_context.html' },
+			{ label: 'OpenTelemetry — Traces', url: 'https://opentelemetry.io/docs/concepts/signals/traces/' },
+		],
+		sections: [
+			{
+				heading: 'Choose a diagnostic event instead of a logging dependency',
+				paragraphs: [
+					'Use a diagnostics channel when a library needs to expose what happened but should not decide where that information is stored. A database wrapper might publish query start and completion data; an API client might publish an outbound request result; a queue library might publish job lifecycle events. The application can subscribe in development, connect the event to an existing logger, or leave the channel unused in a minimal deployment.',
+					'Keep the event contract narrow and versioned. A channel name is process-local coordination, not a public network API, so document the payload in the library and avoid publishing objects whose shape changes accidentally. Do not send secrets, full authorization headers, raw request bodies, or unbounded error objects merely because a diagnostic subscriber might want them.',
+				],
+				bullets: ['Name channels by stable library and event, such as `pilotlab.http.client.request.start`', 'Publish operation metadata, duration, outcome, and a safe correlation identifier', 'Keep business decisions and authorization outside the subscriber', 'Treat an unconsumed channel as a valid production configuration', 'Use a separate durable audit event when the record must survive process failure'],
+			},
+			{
+				heading: 'Publish only when a subscriber can use the event',
+				paragraphs: [
+					'Node documents that publishing has zero overhead when a channel has no subscribers. Use `channel.hasSubscribers` as the fast path around expensive diagnostic preparation, but do not put required application work behind that condition. The request itself must still be sent, the transaction must still commit, and the error must still be handled when observability is disabled.',
+					'Create the channel once at module scope so producers and consumers use the same named object. Publish plain, bounded data. A subscriber runs in the publisher’s process and can throw or perform slow work, so the subscriber contract must say whether handlers are expected to be synchronous and lightweight. If exporting telemetry is expensive, enqueue a sanitized event to a bounded worker rather than blocking the request path indefinitely.',
+				],
+				bullets: [
+					"import diagnosticsChannel from 'node:diagnostics_channel';",
+					"const requestStart = diagnosticsChannel.channel('pilotlab.http.client.request.start');",
+					"if (requestStart.hasSubscribers) requestStart.publish({ method, host, operationId });",
+					'Use an allowlist for methods, hosts, status classes, and operation names before publishing',
+					'Never publish a live mutable request object that a subscriber can alter while the operation is running',
+				],
+			},
+			{
+				heading: 'Carry request context with AsyncLocalStorage',
+				paragraphs: [
+					'A diagnostic event is much more useful when a subscriber can associate it with the current request or job. Node’s `AsyncLocalStorage` associates state with an asynchronous execution chain and propagates it through promises and callbacks in ordinary async code. Establish the context at the request boundary, then read it inside the subscriber rather than passing a correlation ID through every library function.',
+					'Use a small immutable store containing only safe identifiers, such as a request ID and tenant-safe operation scope. Do not treat context as authentication: a value in the store is for correlation, while authorization must reload and validate the current principal and resource. When a custom event emitter, worker pool, or callback boundary loses context, use an explicit `AsyncResource` integration or pass the operation ID deliberately and test that boundary.',
+				],
+				bullets: [
+					"const requestContext = new AsyncLocalStorage<{ requestId: string }>();",
+					"requestContext.run({ requestId }, () => handler(req, res));",
+					"const context = requestContext.getStore(); subscriber({ ...event, requestId: context?.requestId });",
+					'Use `run()` for a bounded request or job scope; avoid `enterWith()` in shared event-listener code unless its lifetime is deliberate',
+					'Log a missing context as an instrumentation gap, not as a fabricated request ID',
+				],
+			},
+			{
+				heading: 'Subscribe at the application or adapter boundary',
+				paragraphs: [
+					'The library should publish an event; the application decides whether that event becomes a structured log, an OpenTelemetry span, a metric, or a test assertion. Node provides `subscribe()` for a named channel and `unsubscribe()` for removing the same handler. Keep subscription setup in one observability module so enablement, redaction, sampling, and shutdown are visible in deployment configuration.',
+					'Use diagnostics channels to bridge instrumentation, not to create a second telemetry system with subtly different semantics. OpenTelemetry describes spans as units of work with context, attributes, and status; a subscriber can create or annotate a span when one exists, but it must map start, completion, and error events consistently. If no active span exists, do not invent a distributed trace merely because a diagnostic event arrived.',
+				],
+				bullets: [
+					"const onComplete = (event) => logger.info({ event: sanitize(event), requestId: requestContext.getStore()?.requestId }, 'http client complete');",
+					"diagnosticsChannel.subscribe('pilotlab.http.client.request.complete', onComplete);",
+					'Use the exact same function reference when unsubscribing during tests or reloadable setup',
+					'Keep adapters one-way: diagnostic data may inform telemetry, but telemetry failures must not change business outcomes',
+					'Sample or aggregate noisy events before sending them to a remote backend',
+				],
+			},
+			{
+				heading: 'Define error, timing, and payload semantics',
+				paragraphs: [
+					'For an operation lifecycle, publish a start event only after the operation has been accepted and a completion event exactly once from a `finally` path. Include a monotonic duration measured by the producer, a bounded outcome such as `success`, `timeout`, or `error`, and a redacted error classification. Do not publish a success event just because a promise was created, and do not assume that a client disconnect means the downstream operation did not commit.',
+					'Be explicit about whether a diagnostic event describes an attempt, a response, or a business result. A retry should have an attempt number and one stable operation ID; otherwise a subscriber may count retries as separate business successes. Keep payload size bounded and avoid circular objects. If subscribers must mutate or enrich data, give them a copied object or a documented immutable contract.',
+				],
+				bullets: ['Use `performance.now()` or an equivalent monotonic timer for durations', 'Publish one terminal outcome for each attempt, including cancellation and timeout', 'Separate operation ID, attempt number, and transport request ID', 'Classify errors without serializing secrets, stack traces, or response bodies by default', 'Document whether events are best-effort and may be lost on process exit'],
+			},
+			{
+				heading: 'Verify the seam and its failure modes',
+				paragraphs: [
+					'Test the producer without a subscriber and assert that the operation still succeeds or fails according to its normal contract. Then subscribe a test handler, run success, validation failure, timeout, cancellation, and retry cases, and assert the event names, bounded fields, operation IDs, and terminal outcomes. Test that `unsubscribe()` stops collection and that a second initialization does not accidentally register duplicate handlers.',
+					'Exercise the real async boundaries: concurrent requests, a queue callback, a worker-pool task, process shutdown, and an exporter outage. A subscriber that throws should have a defined policy; if diagnostic code is allowed to affect the request, isolate it with a guarded handler and a test. Watch event volume, handler duration, memory, dropped records, and context-missing rates after rollout. Instrumentation is successful when it answers an operational question without becoming a new dependency chain in the critical path.',
+				],
+				bullets: ['No subscriber: business behavior and latency remain within the normal baseline', 'Subscriber: every expected lifecycle has one bounded, correctly correlated event', 'Retry: attempts are distinguishable from the one business operation', 'Context: concurrent requests never receive each other’s IDs', 'Failure: exporter, subscriber, timeout, and shutdown behavior are observable and bounded', 'Privacy: tests and logs contain no credentials, raw bodies, or unapproved identifiers', 'Operations: channel names and payload versions are documented with the library'],
+			},
+		],
+	},
 ];

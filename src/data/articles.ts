@@ -6933,4 +6933,86 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'render-user-markdown-safely-web-app',
+		title: 'How to Render User Markdown Safely in a Web App',
+		seoTitle: 'Render User Markdown Safely in a Web App | PilotLab',
+		dek: 'Keep Markdown useful without turning stored content into executable HTML: define the syntax, sanitize the output, validate links, and verify every rendering path.',
+		published: '2026-11-09',
+		updated: '2026-11-09',
+		readTime: '9 min read',
+		category: 'Web application engineering',
+		keyword: 'how to render user Markdown safely in a web app',
+		intro: 'Markdown is attractive for comments, knowledge bases, support notes, and AI-assisted drafts because people can write structured text without editing HTML. The security boundary appears when that text is converted into browser markup. A safe implementation treats Markdown as untrusted input, chooses a deliberately small syntax, sanitizes the resulting HTML, validates URLs in their actual context, and renders through one reviewed pipeline. This tutorial focuses on the decisions that prevent a stored Markdown comment from becoming stored cross-site scripting.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'CommonMark — current specification', url: 'https://spec.commonmark.org/current/' },
+			{ label: 'OWASP — Cross Site Scripting Prevention Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html' },
+			{ label: 'MDN — Cross-site scripting (XSS)', url: 'https://developer.mozilla.org/en-US/docs/Web/Security/Attacks/XSS' },
+			{ label: 'MDN — Trusted Types API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API' },
+			{ label: 'MDN — Content Security Policy', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP' },
+		],
+		sections: [
+			{
+				heading: 'Define the content contract before choosing a parser',
+				paragraphs: [
+					'Markdown is a text format, not a security policy. CommonMark defines syntax including links, images, code, and raw HTML; a parser may therefore produce elements and URLs that your product does not want to allow. Decide what users need before wiring a renderer: headings, emphasis, lists, blockquotes, code, and same-site links may be enough for a support note. Disable raw HTML and avoid extensions that add embeds, scripts, arbitrary attributes, or executable components unless each one has a separate threat model.',
+					'Store the original Markdown as untrusted source and store a renderer version with any derived HTML. That gives you a migration path when the parser or sanitizer changes. Do not treat content created by an employee, an AI model, or an internal integration as trusted merely because it came from a familiar system. If it can be edited, imported, or influenced by another user, it belongs on the untrusted side of the boundary.',
+				],
+				bullets: ['Write an allowlist of block types, inline types, attributes, and URL schemes', 'Disable raw HTML unless you have a narrowly reviewed reason to support it', 'Set maximum input bytes, nesting depth, link count, and rendered output size', 'Persist source, renderer version, sanitizer version, and moderation state separately', 'Keep private drafts and published content under the same rendering rules'],
+			},
+			{
+				heading: 'Parse to HTML, then sanitize the HTML output',
+				paragraphs: [
+					'The safe pipeline is not “escape the Markdown string and call it done.” First parse the Markdown with a maintained implementation, then sanitize the generated HTML with a maintained HTML sanitizer configured for your allowlist. OWASP recommends context-appropriate output encoding and says that applications accepting user-authored HTML need sanitization; a parser’s valid output is not proof that the browser should execute or load every part of it.',
+					'Keep sanitization on the server before persistence or publication, and repeat it at the final render boundary if another service can alter the content. The second pass is defense in depth, not permission to let unsafe HTML circulate internally. If you also render in the browser, use a library and configuration that support the browser environment, and make the call site obvious. Never concatenate sanitized fragments with unsanitized titles, attributes, or URLs.',
+				],
+				bullets: [
+					'Conceptual flow: `source Markdown → parser → HTML sanitizer → policy checks → stored/rendered HTML`',
+					'Allow only elements needed by the product, such as `p`, `em`, `strong`, `ul`, `ol`, `li`, `blockquote`, `code`, and `pre`',
+					'Remove event-handler attributes, `style`, `srcdoc`, forms, and executable or plugin elements by default',
+					'Reject malformed or oversized input rather than silently producing an unbounded document',
+					'Pin parser and sanitizer versions, review changelogs, and run the security fixture set on upgrades',
+				],
+			},
+			{
+				heading: 'Validate links and images as a separate policy',
+				paragraphs: [
+					'URL-bearing Markdown deserves its own review. A link can be syntactically valid while still using a dangerous scheme or sending a user to an untrusted destination. Parse the URL with a standards-based URL implementation, allow only the schemes and destinations your feature needs, and make the decision on the normalized value. For a notes feature, `https`, `mailto`, and relative same-origin paths may be enough; `javascript:`, `data:`, and unexpected schemes should be rejected rather than “cleaned up.”',
+					'Images add privacy, availability, and content risks even when they cannot execute script. Decide whether remote images are needed at all. If they are, allowlist hosts or proxy them through a service that enforces size, content type, timeouts, and malware policy. Add `rel="noopener noreferrer"` to links that open a new browsing context, and do not let Markdown authors supply arbitrary target, download, or security-sensitive attributes.',
+				],
+				bullets: ['Allowlist URL schemes after parsing, not with a substring check', 'Prefer relative links or known origins for internal content', 'Do not fetch remote images from the request path without bounded timeouts and size limits', 'Use server-side link previews only with SSRF protections and an explicit destination policy', 'Test encoded, mixed-case, whitespace, and nested URL forms—not only obvious `javascript:` strings'],
+			},
+			{
+				heading: 'Render through one reviewed sink',
+				paragraphs: [
+					'MDN describes `innerHTML` and similar APIs as injection sinks because they interpret strings as HTML. Prefer framework output that treats values as text whenever rich rendering is not required. When rich HTML is required, create one small rendering component or helper that accepts only the sanitized type or value produced by the pipeline. Do not let individual templates decide to bypass escaping because a field “usually contains Markdown.”',
+					'For client-side rendering, Trusted Types can require HTML passed to supported injection sinks to come from a policy. The API does not sanitize anything by itself: your policy must call the approved sanitizer, and the CSP directive `require-trusted-types-for \'script\'` can enforce the sink boundary in supporting browsers. Use this as a guardrail around a correct sanitizer, not as a replacement for server-side validation or a promise of universal browser enforcement.',
+				],
+				bullets: [
+					'Keep plain-text fields plain text; do not render a username, title, or error as HTML',
+					'Use one named helper such as `renderSafeMarkdown()` and forbid ad hoc `innerHTML` calls in review',
+					'Apply a CSP appropriate to the application, including restrictions on script sources and inline execution',
+					'If using Trusted Types, make the policy name and sanitizer version observable and test policy violations',
+					'Keep content authorization separate: sanitized HTML does not decide who may read or publish it',
+				],
+			},
+			{
+				heading: 'Test stored, reflected, and DOM-based failure modes',
+				paragraphs: [
+					'Build a fixture corpus before rollout. Include raw HTML, event handlers, SVG and MathML attempts, dangerous URL schemes, entity encoding, nested links, malformed tables or lists, very deep input, long attributes, null bytes, Unicode confusables, and content that looks like an instruction to an AI editor. Assert the exact allowed output or a safe rejection. Test both a new post and an old stored post after a parser or sanitizer upgrade.',
+					'Exercise every delivery path: server-rendered pages, client hydration, previews, email, search indexing, admin screens, exports, notifications, and API responses consumed by another frontend. A safe article page does not protect an admin preview that uses a different renderer. Use browser tests to confirm that payloads do not execute, links resolve only as intended, CSP reports are understood, and a sanitizer failure cannot publish content by falling through to raw source.',
+				],
+				bullets: ['A malicious stored comment remains inert for every viewer and role', 'Preview and published rendering produce the same security policy', 'Unknown tags, attributes, schemes, and oversized documents fail closed', 'A parser or sanitizer upgrade is tested against saved fixtures before deployment', 'No raw Markdown is inserted into HTML, JavaScript, CSS, or URL contexts', 'Logs and security reports identify the policy decision without storing sensitive content'],
+			},
+			{
+				heading: 'Production checklist and limitations',
+				paragraphs: [
+					'No sanitizer configuration eliminates every application risk. A permissive allowlist can still create phishing, privacy, or availability problems, and a safe HTML fragment can become dangerous when a later feature places it in an attribute, email template, or script-generated string. Keep the output context-specific and make the smallest useful feature the default. If users only need formatting, rendering Markdown to a restricted HTML subset is safer than accepting arbitrary HTML.',
+					'Before launch, document the supported Markdown dialect, output policy, URL policy, versions, migration procedure, and owner. Monitor rejected content, sanitizer changes, CSP violations, render latency, output size, and reports from every surface. The practical success criterion is not that a demo renders bold text; it is that the product remains useful when content is hostile, malformed, old, imported, or rendered by a path the original developer did not anticipate.',
+				],
+				bullets: ['The parser, sanitizer, and allowlists are pinned and reviewed', 'Raw HTML is disabled or separately justified and tested', 'Published content is sanitized before it reaches every rendering surface', 'URL, image, iframe, and external-fetch rules are explicit', 'CSP and Trusted Types are defense in depth, not the only control', 'Fixtures cover stored, reflected, DOM, preview, export, and admin paths', 'A rollback or re-sanitize migration exists for policy changes', 'The team can remove rich rendering without losing the original source'],
+			},
+		],
+	},
 ];

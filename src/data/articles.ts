@@ -7015,4 +7015,86 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'build-least-privilege-mcp-tool-server',
+		title: 'How to Build a Least-Privilege MCP Tool Server',
+		seoTitle: 'Build a Least-Privilege MCP Tool Server | PilotLab',
+		dek: 'Expose useful actions to an AI client without turning a tool server into an unrestricted remote shell: narrow schemas, recheck authorization, confirm side effects, and audit every call.',
+		published: '2026-11-10',
+		updated: '2026-11-10',
+		readTime: '10 min read',
+		category: 'AI integration and workflow automation',
+		keyword: 'how to build a secure MCP tool server',
+		intro: 'The Model Context Protocol makes it straightforward to expose tools that an AI client can discover and call. The difficult part is deciding what those tools are allowed to do when the model, tool arguments, retrieved content, and downstream APIs are all imperfect inputs. This tutorial designs a small MCP tool server around a read-only order lookup and a separately confirmed refund request, with validation, authorization, bounded work, and audit evidence at every boundary. The protocol improves interoperability; it does not make a dangerous tool safe by itself.',
+		relatedService: { label: 'AI integration and workflow automation', href: '/services/ai-integration-workflow-automation' },
+		sources: [
+			{ label: 'Model Context Protocol — Architecture', url: 'https://modelcontextprotocol.io/specification/2025-06-18/architecture' },
+			{ label: 'Model Context Protocol — Tools', url: 'https://modelcontextprotocol.io/specification/2025-06-18/server/tools' },
+			{ label: 'Model Context Protocol — Authorization', url: 'https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization' },
+			{ label: 'Model Context Protocol — Security best practices', url: 'https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices' },
+			{ label: 'OWASP — LLM01: Prompt Injection', url: 'https://genai.owasp.org/llmrisk/llm01-prompt-injection/' },
+		],
+		sections: [
+			{
+				heading: 'Treat an MCP server as an authority boundary',
+				paragraphs: [
+					'MCP uses a host, client, and server model. The host coordinates user consent and security policy, the client maintains an isolated connection to one server, and the server exposes focused capabilities. That separation is useful, but a server still owns the final checks for its own data and side effects. A model selecting a tool is not an authorization event, and a client displaying a confirmation prompt is not a substitute for server-side authorization.',
+					'Start with one workflow and write its threat model before writing protocol code. A read-only `orders.get` tool may be useful for support; `orders.refund` changes money and needs a stronger policy, a fresh resource check, and explicit confirmation. Do not expose a generic SQL tool, shell tool, arbitrary HTTP client, or “execute workflow” escape hatch just because the first demo needs more flexibility. A narrow tool is easier to explain, test, revoke, and review.',
+				],
+				bullets: ['Define the user, tenant, resource, and business effect for every tool', 'Separate read-only tools from tools that create, delete, publish, or move money', 'Keep secrets, credentials, and authorization policy outside model-controlled arguments', 'Decide which calls require user confirmation and which may be automated', 'Use a dedicated server identity with only the downstream permissions it needs'],
+			},
+			{
+				heading: 'Design a small, explicit tool contract',
+				paragraphs: [
+					'Tool definitions include a name, description, and JSON Schema input contract. Make the description operationally precise: say which records are searched, which tenant is inferred from the authenticated session, whether results are partial, and which actions are irreversible. Do not ask the model to supply a tenant ID or an authorization scope when the server can derive those values from the authenticated principal.',
+					'Use bounded enums, lengths, counts, and date ranges. Reject unknown properties when your validator supports that rule, and validate again in the server handler rather than trusting a client or model to honor the schema. For a refund request, require an opaque order ID and a reason enum, but keep the amount, currency, customer identity, and eligibility decision server-owned. A valid JSON object can still be unauthorized or dangerous.',
+				],
+				bullets: [
+					"const getOrder = { name: 'orders.get', description: 'Read one order visible to the signed-in support agent.', inputSchema: { type: 'object', additionalProperties: false, properties: { orderId: { type: 'string', pattern: '^ord_[A-Za-z0-9_-]{8,64}$' } }, required: ['orderId'] } };",
+					'Keep tool names stable and descriptive; changing semantics under the same name is a compatibility and safety problem',
+					'Limit result fields and redact payment credentials, secrets, and unrelated customer data',
+					'Use an output schema for structured results when clients need machine-readable fields',
+					'Never let free-form model text become SQL, a URL, a filesystem path, or a downstream tool name',
+				],
+			},
+			{
+				heading: 'Authorize every call against current server state',
+				paragraphs: [
+					'Authenticate the transport according to the deployment: a local stdio server should receive credentials from its controlled environment, while an HTTP server should implement an appropriate authorization scheme. The MCP authorization specification describes OAuth-based discovery for protected HTTP servers and requires resource-specific token validation. Whichever transport you use, validate the caller before executing the tool and do not treat a tool handle, session, or model-provided identifier as permission.',
+					'Load the current principal, tenant, resource, and policy at the point of execution. A refund proposal may have been created minutes ago, the order may already be refunded, or the agent’s role may have changed. Check tenant ownership, scope, resource state, amount limits, and approval requirements immediately before the side effect. If the server calls a downstream API, use a separate credential for that API; do not pass through an inbound token without validating its audience and purpose.',
+				],
+				bullets: ['Return no cross-tenant existence signal for an order the caller cannot access', 'Use explicit allowlists for tool-to-downstream-operation mappings', 'Recheck authorization after any user confirmation and before commit', 'Make refund and other high-impact calls idempotent with a server-owned operation ID', 'Expire approval requests and reject stale or already-completed operations'],
+			},
+			{
+				heading: 'Keep side effects behind confirmation and an idempotent executor',
+				paragraphs: [
+					'The MCP tools guidance recommends a human in the loop who can deny invocations, with clear UI about exposed tools and confirmation for sensitive operations. Model that as a workflow state rather than a sentence in the prompt. A first tool call can create a short-lived refund proposal containing the order, calculated amount, policy version, and an operation ID. The client can show those exact facts for approval; a second server call executes only that still-valid proposal.',
+					'The executor must be safe when the response is lost and the client retries. Store the operation ID with a unique constraint, transition the proposal with compare-and-set semantics, and return the recorded result for a duplicate request. If the downstream payment provider has its own idempotency contract, pass a server-generated key—not arbitrary model text—and reconcile an unknown outcome before trying again. A confirmation prompt reduces accidental actions; it does not solve duplicate delivery or a compromised client.',
+				],
+				bullets: [
+					'Use states such as `proposed`, `approved`, `executing`, `succeeded`, `failed`, and `expired`',
+					'Show resource, amount, destination, effect, and expiry—not only a natural-language summary',
+					'Check the proposal owner, tenant, policy version, and current resource version at execution',
+					'Write the audit record before and after the external side effect',
+					'Never interpret a tool result that says “approval needed” as proof that approval exists',
+				],
+			},
+			{
+				heading: 'Bound tool work and treat content as untrusted',
+				paragraphs: [
+					'Tool inputs can be malformed, oversized, or deliberately chosen to trigger expensive queries. Add timeouts, row and byte limits, rate limits, and cancellation around every downstream operation. Return a bounded, useful error instead of a database stack trace or a full provider response. MCP distinguishes protocol errors, such as malformed requests or unknown tools, from tool execution errors reported with `isError: true`; keep those meanings consistent so the client can recover without retrying a deterministic denial forever.',
+					'Order notes, email bodies, uploaded documents, and search results are data, not instructions. Prompt injection can attempt to make the model reveal secrets, call another tool, or change the workflow. Delimit untrusted content, return only the fields needed for the task, and keep authorization and allowed actions in code. Sanitize tool output before it is shown to users or passed back to a model, and avoid returning raw HTML, credentials, internal URLs, or hidden operational metadata.',
+				],
+				bullets: ['Set maximum input size, query cost, result count, response bytes, and execution time', 'Rate-limit by authenticated principal, tenant, tool, and downstream dependency', 'Use `isError: true` for recoverable business or provider failures; use protocol errors for invalid protocol requests', 'Redact secrets and personal data from tool results and logs', 'Make cancellation and partial downstream completion visible to the caller'],
+			},
+			{
+				heading: 'Verify the server with an adversarial test matrix',
+				paragraphs: [
+					'Test discovery and invocation as contracts. The client should see only the intended tools, schemas should reject missing, extra, malformed, and oversized arguments, and a valid request should still pass tenant and resource authorization. Run the read path with allowed and denied principals, then run the refund path through proposal, approval, duplicate execution, stale approval, provider timeout, and lost-response cases. Assert that one business effect produces one durable operation result.',
+					'Add fixtures containing prompt-injection instructions in order notes and provider responses. Confirm that they cannot expand the tool set, alter the amount, select a tenant, reveal a credential, or bypass confirmation. Test rate limits, timeouts, cancellation, process restart, audit failure, downstream retries, and token audience errors. In production, monitor tool calls, denials, confirmation outcomes, latency, result sizes, repeated operation IDs, and policy versions without logging raw customer content by default.',
+				],
+				bullets: ['Tool list and descriptions expose no capability the server cannot safely enforce', 'Every call is authenticated, authorized, bounded, and correlated to an actor and tenant', 'Read tools cannot mutate state; write tools cannot run without the required policy path', 'Duplicate and unknown-outcome calls reconcile to one operation result', 'Untrusted content remains data and cannot change authorization or tool selection', 'Operators can disable a risky tool without taking down safe read-only tools', 'Audit records explain who requested, approved, executed, denied, or failed each call'],
+			},
+		],
+	},
 ];

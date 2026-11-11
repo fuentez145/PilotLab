@@ -21,6 +21,74 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'diagnose-http-421-misdirected-request',
+		title: 'How to Diagnose HTTP 421 Misdirected Request in Multi-Host APIs',
+		seoTitle: 'Diagnose HTTP 421 Misdirected Request in Multi-Host APIs | PilotLab',
+		dek: 'Trace the TLS, HTTP/2, proxy, and hostname mismatch behind a 421 response—and fix connection reuse without hiding a routing defect.',
+		published: '2026-11-11',
+		updated: '2026-11-11',
+		readTime: '8 min read',
+		category: 'API and platform engineering',
+		keyword: 'how to fix HTTP 421 Misdirected Request in an API',
+		intro: 'HTTP 421 Misdirected Request is easy to misclassify as a random client error. It usually means a connection was reused for a hostname, scheme, or authority that the receiving server cannot serve. This guide gives platform teams a diagnostic path for multi-tenant domains, wildcard certificates, HTTP/2 connection reuse, reverse proxies, and service meshes. The goal is not to retry every 421 blindly; it is to identify which layer made the wrong routing decision and make the retry contract safe.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'MDN — 421 Misdirected Request', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/421' },
+			{ label: 'RFC 9110 — 421 Misdirected Request', url: 'https://www.rfc-editor.org/rfc/rfc9110#name-421-misdirected-request' },
+			{ label: 'Node.js — HTTP/2 API', url: 'https://nodejs.org/api/http2.html' },
+		],
+		sections: [
+			{
+				heading: 'What 421 means at the protocol boundary',
+				paragraphs: [
+					'MDN describes 421 as a response from a server that is unable to produce a response for the scheme and authority in the request URI. In practice, the request reached a server or connection that is valid for one origin but not for this particular host. The status is different from 404, 502, or 503: the application route may be perfectly valid, but the selected connection or authority is wrong.',
+					'The classic case is HTTP/2 connection reuse. A client can keep one TLS connection open and use it for more than one hostname when certificate and protocol rules allow it. A wildcard certificate may cover both names while the selected backend, SNI configuration, or virtual host cannot serve both. A server may return 421 so the client can retry the request on a connection appropriate for the requested authority.',
+				],
+				bullets: ['Treat 421 as a routing and connection-selection signal, not generic overload', 'Record the requested scheme, authority, protocol, SNI, and selected upstream', 'Do not “fix” it by returning 200 with an error body', 'Keep application authorization and tenant routing checks separate from transport routing', 'Prefer one reproducible host pair and one request before changing infrastructure'],
+			},
+			{
+				heading: 'Map every hostname and TLS termination point',
+				paragraphs: [
+					'Start with the public hostname that returns 421 and draw the path: DNS, CDN, edge proxy, TLS terminator, HTTP/2 listener, service mesh, ingress, and origin. At each hop, identify which value selects the virtual host and which value selects the upstream. HTTP/2 uses the `:authority` pseudo-header; a compatibility layer may fall back to `host`, but a proxy that rewrites one and preserves the other can create an inconsistent request.',
+					'Check certificates and SNI independently from application routing. A certificate that validates a hostname does not prove that the backend is configured to serve it. Verify the certificate SANs, SNI received at each TLS boundary, default virtual host, ALPN protocol, and the route table for the exact authority. In a multi-tenant design, make the tenant-to-host mapping explicit and reject unknown hosts before they reach a shared application route.',
+				],
+				bullets: ['List every public hostname, certificate, SNI policy, and upstream target', 'Confirm DNS does not send one hostname to an incompatible listener', 'Compare `:authority`, `Host`, SNI, and the application’s perceived host', 'Check whether a CDN or mesh reuses upstream connections across authorities', 'Redact cookies and authorization headers from diagnostic captures'],
+			},
+			{
+				heading: 'Reproduce connection reuse instead of testing only fresh requests',
+				paragraphs: [
+					'A fresh request can pass while a pooled HTTP/2 client fails after it reuses a session. Build a test with two hostnames that share the same client and connection pool. Send a request to host A, then host B over the same client, and record protocol, authority, response status, and connection identity. Repeat in the reverse order. If only one sequence fails, the order in which the pool was established is evidence about the routing or coalescing decision.',
+					'Use a protocol-aware client or browser network trace, not only a command that opens a new connection for every request. In Node.js, inspect the HTTP/2 session and request authority according to the supported API version. A test that disables pooling may hide the production failure. Conversely, do not enable aggressive coalescing in production merely to make a local test pass; the server and certificate policy must make reuse valid.',
+				],
+				bullets: ['Test HTTP/1.1 and HTTP/2 separately so protocol differences are visible', 'Capture whether the request used a new or existing TLS session', 'Test cold and warm connection pools, redirects, and DNS changes', 'Compare direct origin, edge, and public-hostname behavior', 'Keep a minimal fixture with two hosts and one deterministic route'],
+			},
+			{
+				heading: 'Fix the layer that made the authority decision',
+				paragraphs: [
+					'If the edge is serving a hostname from the wrong virtual host, fix the listener or routing rule rather than adding an application retry. If the edge routes correctly but the mesh reuses an upstream connection across incompatible authorities, constrain the pool or configure authority-aware upstream routing. If the origin is intentionally unable to serve a host, ensure the edge never sends that host there. A 421 response can be a useful guardrail, but it should not be the normal way to discover a static configuration error.',
+					'Choose connection coalescing deliberately. Sharing a connection can reduce handshakes, but it requires compatible certificate, authority, protocol, and server-routing conditions. Separate pools by origin when the infrastructure cannot prove those conditions. For tenant domains, a small amount of connection reuse is usually less valuable than predictable isolation and clear incident diagnostics.',
+				],
+				bullets: ['Correct SNI and virtual-host selection at the first TLS termination point', 'Make proxy upstream pools aware of authority and tenant boundaries', 'Do not trust a client-supplied host to select an arbitrary backend', 'Use explicit default-host behavior that fails closed', 'Document whether 421 is expected, temporary, or an invariant violation'],
+			},
+			{
+				heading: 'Retry 421 only when the client can select a new connection',
+				paragraphs: [
+					'RFC 9110 permits a client to retry a 421 on a different connection. That does not mean every generic retry middleware should repeat every request. A client must create or select a connection suitable for the requested authority; retrying on the same pool can reproduce the problem. For a read, one bounded retry after pool eviction may be reasonable. For a write, the operation must already have idempotency or reconciliation semantics before any transport retry.',
+					'If your service is an intermediary, decide whether to pass 421 through, translate it to a controlled upstream error, or select a fresh upstream connection and retry. Preserve the requested authority and avoid retry loops between two misconfigured proxies. Return a clear failure with a request ID when the second connection also fails, and make the retry count observable rather than hiding it inside an SDK.',
+				],
+				bullets: ['Evict or avoid the unsuitable connection before retrying', 'Allow at most one or another explicitly bounded attempt', 'Do not retry non-idempotent writes without a business-level key', 'Stop on repeated 421, authentication errors, or an authority mismatch', 'Record original status, retry decision, connection target, and final outcome'],
+			},
+			{
+				heading: 'Production verification and failure modes',
+				paragraphs: [
+					'Verify the public path with a matrix of hostnames, protocols, connection states, and deployment locations. Assert that each valid authority reaches the intended service, that an intentionally unsupported authority fails at the edge, and that a valid request does not change tenant context when a pool is reused. Include certificate rotation, an expired certificate, a proxy restart, a new replica, a DNS update, a redirect between hosts, and a service-mesh policy change.',
+					'Watch 421 counts by hostname, protocol, edge, upstream, and client library. A rise after a certificate or ingress change is more useful than a global error count. Also watch retry amplification, connection churn, handshake time, and failed writes. Remove a workaround when the routing invariant is fixed; a permanent retry hides capacity and configuration problems and makes the next incident harder to diagnose.',
+				],
+				bullets: ['Cold and warm HTTP/2 pools produce the intended result for every supported host', 'SNI, `:authority`, `Host`, certificate, and upstream target agree at each hop', 'A 421 retry uses a different suitable connection and stops at the limit', 'Writes remain safe when a response is lost or a retry is attempted', 'Tenant isolation is tested across host and connection reuse combinations', 'Dashboards expose 421 rate, host, protocol, pool churn, and retry outcomes', 'The runbook identifies the owner for DNS, certificates, proxies, ingress, and origin routing'],
+			},
+		],
+	},
+	{
 		slug: 'handle-http-425-too-early-api-safely',
 		title: 'How to Handle HTTP 425 Too Early Safely in an API',
 		seoTitle: 'Handle HTTP 425 Too Early Safely in an API | PilotLab',

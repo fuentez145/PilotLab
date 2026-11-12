@@ -7165,4 +7165,88 @@ export const articles: Article[] = [
 			},
 		],
 	},
+	{
+		slug: 'protect-browser-api-with-fetch-metadata',
+		title: 'How to Protect Browser APIs with Fetch Metadata',
+		seoTitle: 'Protect Browser APIs with Fetch Metadata | PilotLab',
+		dek: 'Use browser-supplied request context to reduce cross-site abuse of state-changing endpoints—without treating missing headers as authentication or replacing CSRF protection.',
+		published: '2026-11-12',
+		updated: '2026-11-12',
+		readTime: '9 min read',
+		category: 'Web application engineering',
+		keyword: 'how to use Fetch Metadata request headers for CSRF defense',
+		intro: 'A browser API often cannot tell the difference between a legitimate request from your own application and a cross-site request that happens to carry a user’s cookies. Fetch Metadata request headers give a server additional browser context: where the request came from, how it was fetched, and what destination the browser expects. This tutorial turns that signal into a narrow resource-isolation policy for a cookie-authenticated API, while keeping CSRF tokens, SameSite cookies, CORS, authentication, and a non-browser client policy in their proper roles.',
+		relatedService: { label: 'Web applications', href: '/services/web-applications' },
+		sources: [
+			{ label: 'MDN — Fetch metadata request header', url: 'https://developer.mozilla.org/en-US/docs/Glossary/Fetch_metadata_request_header' },
+			{ label: 'MDN — Sec-Fetch-Site', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site' },
+			{ label: 'MDN — Sec-Fetch-Mode', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Mode' },
+			{ label: 'MDN — Sec-Fetch-Dest', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Dest' },
+			{ label: 'web.dev — Protect your resources from web attacks with Fetch Metadata', url: 'https://web.dev/articles/fetch-metadata' },
+		],
+		sections: [
+			{
+				heading: 'Treat the headers as context, not credentials',
+				paragraphs: [
+					'MDN describes Fetch Metadata headers as browser-provided information about the context of a request. The useful fields include `Sec-Fetch-Site`, which describes the relationship between the initiator and the target, `Sec-Fetch-Mode`, which describes how the request was made, and `Sec-Fetch-Dest`, which describes how the response will be used. `Sec-Fetch-User` can signal a user-activated navigation. The `Sec-` prefix makes these forbidden request headers, so page JavaScript cannot set an arbitrary value through the normal Fetch API.',
+					'That makes the fields useful as a defense-in-depth signal, not as proof of identity. A native client, server-to-server caller, test tool, older browser, proxy, or unusual embedding context may omit them. Authenticate the caller, authorize the resource, validate the body, and keep a real CSRF defense for cookie-authenticated state changes. A request with `Sec-Fetch-Site: same-origin` can still be sent by compromised same-origin code or an authenticated attacker.',
+				],
+				bullets: ['Use Fetch Metadata to reduce unintended cross-site request contexts', 'Never use it as a replacement for authentication, authorization, CSRF tokens, or input validation', 'Treat unknown and missing values as an explicit compatibility case', 'Keep the policy at a trusted server or edge boundary, not in client JavaScript', 'Do not log cookies, authorization headers, or full sensitive URLs while debugging'],
+			},
+			{
+				heading: 'Inventory routes and separate navigation from API writes',
+				paragraphs: [
+					'Before adding a rule, classify the resources it protects. A public image, stylesheet, or document navigation may intentionally accept cross-site requests; a cookie-authenticated JSON mutation usually should not. Build a route matrix with method, authentication mode, expected response type, allowed callers, and whether a cross-site request is a supported product feature. Do not apply one global deny rule to a site that serves both public assets and private application data.',
+					'For a typical browser API, the first useful boundary is the combination of method and destination. `Sec-Fetch-Dest: empty` commonly accompanies programmatic fetches, while a top-level page navigation has `navigate` mode and a document destination. These values are hints about browser intent, not a guarantee about the bytes returned. Enforce the route’s normal content type and authorization independently, and test redirects because the final request context can differ from the original one.',
+				],
+				bullets: ['Protect state-changing, cookie-authenticated routes first: POST, PUT, PATCH, and DELETE', 'Allow public navigations and assets according to their actual sharing contract', 'Keep read endpoints separate when cross-site embedding or public caching is intentional', 'Define behavior for redirects, preflight requests, uploads, downloads, and WebSockets', 'Write down which non-browser integrations omit the headers and how they authenticate'],
+			},
+			{
+				heading: 'Start with a report-only policy and a small allowlist',
+				paragraphs: [
+					'Observe real traffic before rejecting it. Record the route class, method, authenticated or anonymous state, the four header values, and the decision reason in a privacy-conscious metric or sampled log. Avoid storing raw request bodies. Look for legitimate mobile clients, embedded views, browser extensions, reverse proxies, health checks, and old browsers that do not send the metadata. A missing header is not automatically an attack, but it is also not evidence that the request is safe.',
+					'After the observation period, use a small default-deny rule for sensitive browser mutations: allow `same-origin` and the same-site cases your cookie and application design explicitly support, reject clear `cross-site` requests, and send unknown or missing contexts through the compatibility path. The exact same-site policy is a product decision: two subdomains may share a site while still being different origins and different trust boundaries. Prefer an explicit trusted-origin list when your application crosses subdomains.',
+				],
+				bullets: [
+					"const site = request.headers.get('sec-fetch-site');",
+					"const mode = request.headers.get('sec-fetch-mode');",
+					"const dest = request.headers.get('sec-fetch-dest');",
+					"const crossSite = site === 'cross-site';",
+					'Use a report-only or shadow decision first; do not begin with a production-wide 403',
+					'Allow only documented values and treat unexpected values as unknown',
+					'Keep an emergency bypass narrow, temporary, authenticated, and observable',
+				],
+			},
+			{
+				heading: 'Enforce the decision before parsing or performing the mutation',
+				paragraphs: [
+					'Once the traffic matrix is understood, put the check at the earliest application or gateway layer that has the route and authentication context. For a state-changing JSON endpoint, reject a clearly cross-site browser request before expensive body parsing or downstream work. Return a generic 403 or the API’s established error representation; do not reveal internal policy details that help an attacker tune requests. Include a request ID so support can correlate a denial without returning sensitive diagnostics to the caller.',
+					'One possible Node.js-style policy is shown below as a starting point, not a drop-in security library. It intentionally allows non-browser callers through to their normal authentication path when metadata is absent. If the endpoint is exclusively a browser session endpoint, you may choose to fail closed on missing values after measuring compatibility. For cross-origin browser clients that are a supported product feature, use an explicit origin and CORS contract instead of weakening the rule for every cross-site request.',
+				],
+				bullets: [
+					"function shouldRejectMutation(req) { const site = req.headers['sec-fetch-site']; const mode = req.headers['sec-fetch-mode']; const dest = req.headers['sec-fetch-dest']; return site === 'cross-site' || (site === 'same-site' && mode === 'no-cors') || (mode === 'navigate' && dest === 'document'); }",
+					'Apply the real rule only to routes whose resource isolation policy requires it; do not copy this predicate to assets or public pages',
+					'Run authentication and authorization even when the metadata check passes',
+					'Keep CORS preflight handling separate: OPTIONS is not the business mutation',
+					'Use a stable policy version in logs so a later rule change is explainable',
+				],
+			},
+			{
+				heading: 'Combine it with the rest of the browser security model',
+				paragraphs: [
+					'Fetch Metadata is strongest as one layer in a broader design. For cookie sessions, use a CSRF token or another server-verified request binding for state changes, set cookie attributes deliberately, and check the request origin where appropriate. For bearer-token APIs, keep the token out of ambient cross-site browser delivery and enforce authorization at the API boundary. For intentionally cross-origin browser applications, configure a narrow CORS allowlist and credentials policy; CORS controls which browser scripts can read responses, while Fetch Metadata helps classify the request context.',
+					'Add response protections that match the resource. Do not return private JSON as an image, script, or frame response merely because the request passed a header check. Use content types, `X-Content-Type-Options: nosniff`, frame and embedding policy, cache controls, and authorization appropriate to the data. A resource-isolation rule reduces attack surface, but it cannot repair an endpoint that leaks secrets in a public response or trusts a client-controlled tenant identifier.',
+				],
+				bullets: ['CSRF token or equivalent server-side request binding for cookie-authenticated mutations', 'SameSite, Secure, and HttpOnly cookie settings chosen for the actual login flow', 'Explicit CORS origins and credentials behavior for supported cross-origin clients', 'Authorization based on the authenticated principal and server-owned tenant state', 'Correct response media types, cache policy, and anti-sniffing protections', 'A documented non-browser authentication path that does not depend on Fetch Metadata'],
+			},
+			{
+				heading: 'Verify browser coverage, compatibility, and failure modes',
+				paragraphs: [
+					'Test the policy with a real browser matrix and a request recorder. From the same origin, exercise a form submission, fetch, navigation, image, and upload; from a different site, exercise the equivalent requests and confirm that only the intended route is denied. Inspect the actual headers at the trusted boundary, not only in browser JavaScript: MDN notes that these are forbidden request headers and are available only for potentially trustworthy URLs. Do not assume a local HTTP setup behaves like the deployed HTTPS origin.',
+					'Then test the cases that expose brittle policies: missing headers, unexpected values, same-site but cross-origin subdomains, redirects, CORS preflight, service-worker requests, embedded webviews, native clients, health checks, logged-out users, oversized bodies, and a proxy that strips or rewrites headers. Confirm a denied mutation performs no side effect, a permitted request still requires authorization, and a client can recover from a 403 without retrying forever. Monitor denial rate by route, browser family, caller class, and policy version after rollout.',
+				],
+				bullets: ['Cross-site state-changing browser requests are rejected before business work', 'Same-origin application flows remain functional across navigation and fetch paths', 'Missing metadata follows a documented compatibility decision', 'Supported non-browser clients authenticate and operate without spoofable browser context', 'CORS, CSRF tokens, cookies, redirects, and preflight behavior are tested together', 'Denials, false positives, and bypass attempts are observable without sensitive payload logging', 'A route-level rollback or shadow mode exists if a legitimate client is blocked'],
+			},
+		],
+	},
 ];

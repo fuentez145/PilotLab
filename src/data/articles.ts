@@ -21,6 +21,75 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'debug-cdn-cache-with-cache-status-header',
+		title: 'How to Debug a CDN Cache with the Cache-Status Header',
+		seoTitle: 'Debug a CDN Cache with the Cache-Status Header | PilotLab',
+		dek: 'Make cache behavior visible across browsers, CDNs, and reverse proxies: read Cache-Status, compare Age and policy headers, and find the layer that is serving, revalidating, or bypassing a response.',
+		published: '2026-11-13',
+		updated: '2026-11-13',
+		readTime: '9 min read',
+		category: 'Web performance',
+		keyword: 'how to debug CDN cache with Cache-Status header',
+		intro: '“The CDN is caching it” is not a diagnosis. A browser cache, edge cache, reverse proxy, and origin can each make a different decision, while generic headers such as `Age` or a vendor-specific `X-Cache` reveal only part of the path. The standardized `Cache-Status` response header gives each cache a structured place to describe what it did. This guide shows how to instrument a public read endpoint, interpret a chain of cache decisions, protect the debug signal, and prove that a cache policy improves delivery without serving the wrong representation.',
+		relatedService: { label: 'Rescue & performance', href: '/services/rescue-performance' },
+		sources: [
+			{ label: 'RFC 9211 — The Cache-Status HTTP Response Header Field', url: 'https://www.rfc-editor.org/rfc/rfc9211' },
+			{ label: 'RFC 9111 — HTTP Caching', url: 'https://www.rfc-editor.org/rfc/rfc9111' },
+			{ label: 'MDN — Age header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Age' },
+			{ label: 'MDN — Vary header', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Vary' },
+		],
+		sections: [
+			{
+				heading: 'Start with the cache chain, not a single “hit” label',
+				paragraphs: [
+					'RFC 9211 defines `Cache-Status` as a response field that describes how caches handled a request and its response. Each list member represents one cache, and the order runs from the cache closest to the origin toward the cache closest to the user. A response can therefore contain several decisions: an internal reverse proxy may hit while the public CDN misses, or the CDN may hit while the browser reuses its own stored response without contacting the network.',
+					'That distinction matters when an operator says “the cache is broken.” First name the layer you are measuring: browser, service worker, CDN, load balancer, reverse proxy, or application-level cache. Make one request that reaches the network, inspect every response header, and record the URL, method, request variant, protocol, status, and timestamp. Do not compare two requests until their authorization, cookies, content negotiation, and cache-busting inputs are known.',
+				],
+				bullets: ['A browser hit is not evidence that the CDN hit', 'A CDN miss may still be served quickly from an origin-side cache', 'A 304 validation is different from transferring a fresh 200 body', 'Record the complete header chain before changing cache rules', 'Use a safe public or synthetic endpoint for initial experiments'],
+			},
+			{
+				heading: 'Read Cache-Status parameters as evidence',
+				paragraphs: [
+					'RFC 9211 defines parameters including `hit`, `fwd`, `fwd-status`, `fwd-reason`, `ttl`, and `stored`. A member such as `"edge"; hit; ttl=42` says that cache satisfied the request and reports a remaining freshness estimate. A member such as `"edge"; fwd=stale; fwd-status=304` says the cache forwarded the request for validation and received a not-modified result. The exact fields a product emits are implementation-dependent, so treat them as evidence about that cache rather than a universal promise about every hop.',
+					'Preserve multiple members when a cache appends its own value. If your reverse proxy replaces the header, you lose the path information that makes the field useful. Give each cache a stable, non-secret identifier and document which component owns it. Do not put customer IDs, authorization details, internal topology, or raw request values in a diagnostic header that may be exposed publicly.',
+				],
+				bullets: ['`hit` means the cache satisfied the request without forwarding it', '`fwd` identifies that the cache forwarded the request and why', '`fwd-status` records the response status received from the next hop', '`ttl` is a cache-provided freshness estimate, not a user-visible freshness guarantee', '`Preserve the list across trusted cache layers, but redact sensitive topology at the public boundary'],
+			},
+			{
+				heading: 'Compare Cache-Control, Age, and the representation',
+				paragraphs: [
+					'`Cache-Status` tells you what a cache says it did; the normal HTTP caching headers tell you what responses are allowed to do. Compare it with `Cache-Control`, `Age`, `Date`, `ETag`, `Last-Modified`, and `Vary`. MDN describes `Age` as the time an object has spent in a proxy cache, while `Vary` identifies request headers that influenced the representation and therefore belong in cache-key decisions. A zero or absent `Age` does not prove that no cache was involved, and a high `Age` does not prove that the body is invalid if the response policy permits it.',
+					'Use a small matrix of requests rather than one curl command. Fetch the same public URL twice, then change one intended variant such as `Accept-Language` or `Accept-Encoding`. Check whether the representation, `Vary`, validator, `Cache-Control`, `Age`, and `Cache-Status` change together. If the body varies by a cookie, authorization, tenant, or feature flag that is not safely represented in the cache key, stop: a better hit ratio is not worth cross-user data exposure.',
+				],
+				bullets: ['`Cache-Control` defines freshness and storage rules; `Cache-Status` reports handling', '`Age` estimates time in a shared cache and is not a complete cache trace', '`Vary` must match the request headers that affect the representation', 'Use `private` or `no-store` for responses that a shared cache must not reuse', 'Validators reduce transfer on revalidation but do not grant authorization'],
+			},
+			{
+				heading: 'Build a repeatable header probe',
+				paragraphs: [
+					'Create a probe that records response headers and a short body fingerprint without storing sensitive content. For example, run `curl --http2 -sS -D headers.txt -o body.bin https://example.com/catalog`, then inspect `Cache-Status`, `Cache-Control`, `Age`, `ETag`, `Vary`, `Date`, and the final status. Repeat from two networks or regions when geography matters. Use a request ID or a harmless query parameter only when you understand whether that parameter changes the cache key; adding a random parameter to every request can intentionally force misses and invalidate the experiment.',
+					'For a conditional request, first capture the validator and then send `If-None-Match` on a second request. A 304 demonstrates validator cooperation, not necessarily a cache hit: the cache may have contacted the origin, or the client may have revalidated directly. Correlate the response with origin logs and edge diagnostics. Keep probe output in a protected workspace if headers contain internal identifiers or cookies, and never paste bearer tokens into a debugging command that will be saved in shell history.',
+				],
+				bullets: ['Capture headers separately from the body and hash the body locally if comparison is needed', 'Use the same method, URL, and safe request headers for a baseline pair', 'Test cold, warm, and revalidated requests as separate cases', 'Compare public hostname behavior with an origin-only control when available', 'Correlate edge evidence with an origin request ID rather than guessing from timing'],
+			},
+			{
+				heading: 'Find the layer that is causing the miss',
+				paragraphs: [
+					'If the CDN reports `fwd=request`, inspect whether the request is cacheable and whether a policy intentionally bypasses it. Common causes include a response with `private` or `no-store`, an authorization or cookie rule, an unsupported method, a query-string normalization difference, an uncacheable status, a short freshness lifetime, or a cache key that varies on more inputs than expected. Do not remove a bypass until you know why it exists.',
+					'If the CDN reports a hit but users see old content, compare the response age and freshness policy with the product’s staleness tolerance. The remedy may be a versioned asset URL, an explicit purge, a shorter lifetime, or an application update strategy—not a global cache disable. If the CDN misses while the origin claims a hit, inspect the hop between them and check whether the upstream response headers were stripped or rewritten. Every layer should have an owner and a documented cache contract.',
+				],
+				bullets: ['Classify the miss reason before changing TTLs', 'Separate cache-key mistakes from intentional authorization bypasses', 'Check redirects and error responses independently from successful reads', 'Use versioned URLs for immutable assets and explicit invalidation for mutable data', 'Keep a kill switch for a broken rule, but record the rule that was disabled'],
+			},
+			{
+				heading: 'Roll out observability without leaking topology',
+				paragraphs: [
+					'RFC 9211 notes that caches decide when to add `Cache-Status`; some deployments expose it on all responses while others enable it only for a debugging mode. For a public site, a short-lived diagnostic header with coarse cache names may be acceptable. For a private API, emit detailed values to an operator-only response path, trace, or access log instead. Header visibility is part of the threat model: cache keys, internal hostnames, and forwarding reasons can help an attacker map infrastructure or infer whether a private response exists.',
+					'Verify the rollout with contract tests at the public boundary. Assert that public cacheable responses have the intended policy, private responses cannot be stored by shared caches, validators produce correct 304 behavior, and the diagnostic field is removed or reduced where it would expose sensitive information. Monitor hit and revalidation rates, origin requests, stale responses, cache errors, and representation mismatches. The objective is explainable delivery, not the highest possible hit ratio.',
+				],
+				bullets: ['Assign ownership for origin, reverse proxy, CDN, and browser-facing policy', 'Keep cache identifiers stable but non-sensitive', 'Test cache behavior after deploys, purges, certificate changes, and routing changes', 'Alert on cross-variant body mismatches and unexpected private-response hits', 'Document how to disable detailed diagnostics without disabling caching'],
+			},
+		],
+	},
+	{
 		slug: 'diagnose-http-421-misdirected-request',
 		title: 'How to Diagnose HTTP 421 Misdirected Request in Multi-Host APIs',
 		seoTitle: 'Diagnose HTTP 421 Misdirected Request in Multi-Host APIs | PilotLab',

@@ -21,6 +21,66 @@ export interface Article {
 
 export const articles: Article[] = [
 	{
+		slug: 'build-small-nodejs-sqlite-job-queue',
+		title: 'Build a Small SQLite Job Queue for a Node.js App',
+		seoTitle: 'Build a SQLite Job Queue in Node.js | PilotLab',
+		dek: 'Use SQLite transactions to claim durable work safely on one host, recover abandoned jobs with leases, and recognize when a queue has outgrown a single database writer.',
+		published: '2026-11-14',
+		updated: '2026-11-14',
+		readTime: '10 min read',
+		category: 'API and platform engineering',
+		keyword: 'build a SQLite job queue in Node.js',
+		intro: 'A small application often needs durable background work before it needs a separate broker: send an email after a request, generate a report, or retry a third-party call without keeping the HTTP request open. SQLite can hold a modest queue when the app and workers share one host and you keep write transactions short. This guide lays out a minimal lease-based design, the atomic claim boundary, retry and idempotency rules, and the operational signals that tell you it is time to move the queue elsewhere. It is not a drop-in replacement for a distributed broker.',
+		relatedService: { label: 'API and platform engineering', href: '/services/api-platform-engineering' },
+		sources: [
+			{ label: 'SQLite — Transaction Control', url: 'https://www.sqlite.org/lang_transaction.html' },
+			{ label: 'SQLite — Write-Ahead Logging', url: 'https://www.sqlite.org/wal.html' },
+			{ label: 'Node.js — SQLite API', url: 'https://nodejs.org/api/sqlite.html' },
+		],
+		sections: [
+			{
+				heading: 'Check that SQLite fits the deployment first',
+				paragraphs: [
+					'SQLite is a reasonable queue store when one application deployment owns a local database file and jobs are short enough that a single writer can keep up. SQLite permits multiple readers but only one simultaneous write transaction. WAL mode lets readers and a writer make progress concurrently, but it does not create multiple concurrent writers, and the database files must live on the same host rather than a network filesystem.',
+					'Choose a broker or server database instead when workers run on multiple machines, queue volume demands sustained concurrent claims, you need managed visibility and replay, or the queue must remain available independently of the web process. The queue design below is useful for a small single-host deployment; it is not a distributed consensus or exactly-once execution system.',
+				],
+				bullets: ['Prerequisites: a supported Node.js release with `node:sqlite`, a local persistent disk, and a backup plan', 'Keep the SQLite database, `-wal`, and `-shm` files on a supported local filesystem', 'Use WAL to improve reader/writer overlap only after testing the actual storage and backup path', 'Do not mount the live database on NFS or share it between hosts', 'Set an explicit threshold for moving to a broker before growth makes migration urgent'],
+			},
+			{
+				heading: 'Represent work and ownership explicitly',
+				paragraphs: [
+					'Keep the queue row small and make its lifecycle observable. A practical schema has a stable job ID, type, serialized payload, status, attempt count, availability time, lease expiry, creation time, and a bounded error summary. Add an index matching the claim query, for example on `(status, available_at, id)`. Store large inputs elsewhere and keep a reference rather than turning the queue table into an unbounded blob store.',
+					'Use states such as `queued`, `running`, `succeeded`, and `dead`. A worker owns a running job only until its lease expires. The lease gives another worker a way to recover work after a process crash; it does not prove the first worker stopped. Every handler must therefore tolerate the same job being attempted again.',
+				],
+				bullets: ['Constrain job types and validate payloads when enqueuing and again before execution', 'Track `attempts`, `available_at`, `locked_until`, and a stable idempotency or job key', 'Keep error messages truncated and scrubbed of secrets and personal data', 'Use a dead-letter state with an operator-visible reason after a bounded number of attempts', 'Apply a retention policy to successful and dead jobs'],
+			},
+			{
+				heading: 'Claim one job in a short atomic transaction',
+				paragraphs: [
+					'Never select a candidate in one transaction and mark it running later: two workers can read the same queued row. In SQLite, use a short `BEGIN IMMEDIATE` transaction so the writer reservation is acquired before selecting and updating. SQLite documents that this can fail with `SQLITE_BUSY` when another writer is active, so handle contention deliberately. Select one due queued job (or expired lease), set it to `running`, increment its attempt count, and set a lease deadline before committing.',
+					'Keep the transaction limited to database work. Do not call an external API, send an email, or wait on a network request while holding the write transaction. In Node.js, `DatabaseSync` operations are synchronous; avoid running long queries or large payload transformations on the event loop, and consider worker threads or a different database if synchronous database work blocks request handling.',
+				],
+				bullets: ['Transaction shape: `BEGIN IMMEDIATE`; select one eligible row; conditionally update it with a fresh lease token and deadline; `COMMIT` (roll back on any error)', 'Use a conditional update such as `UPDATE jobs SET status = \'running\', lease_token = ?, locked_until = ?, attempts = attempts + 1 WHERE id = ? AND (status = \'queued\' OR locked_until < ?)` and require exactly one changed row', 'If `BEGIN IMMEDIATE` or a write returns busy, apply a bounded retry with jitter or let the polling cycle try again', 'Commit before doing the job; update completion only after the handler result is known', 'Use a unique worker/lease token and require it in completion updates so a stale owner cannot finish a newer claim', 'On shutdown, stop claiming, allow a bounded drain, and let unfinished leases expire safely'],
+			},
+			{
+				heading: 'Make retries safe for side effects',
+				paragraphs: [
+					'A worker can complete an external side effect and crash before recording `succeeded`. On restart, the lease expires and another attempt may repeat the effect. No local queue transaction can atomically commit both a SQLite row and an unrelated payment, email, or HTTP API operation. Pass a stable idempotency key to downstream systems that support it, or design a reconciliation step that can discover whether the effect already happened.',
+					'For transient failures, release or reschedule the job with bounded exponential backoff and jitter; for permanent validation or authorization failures, move it to `dead` rather than retrying forever. Make the distinction explicit in handler results. Avoid storing an exception stack or raw response body if it could contain credentials or customer data.',
+				],
+				bullets: ['Assume at-least-once attempts, not exactly-once effects', 'Use a stable downstream idempotency key derived from the job, not a new key on each retry', 'Set a maximum attempt count, maximum job age, and per-attempt timeout', 'Do not retry permanent errors or invalid payloads without operator correction', 'If the outcome is unknown after a timeout, reconcile before triggering the effect again'],
+			},
+			{
+				heading: 'Verify contention, crash recovery, and operational limits',
+				paragraphs: [
+					'Test with two independent database connections or worker processes against the same local file. Enqueue several jobs, start both claim loops together, and assert that no valid lease token is issued to two workers for one current claim. Kill a worker after claim, wait past the lease, and verify another worker recovers the job. Also simulate a crash after the external effect but before the success update; the test should prove that idempotency or reconciliation prevents a duplicate business action.',
+					'Monitor oldest queued age, queue depth by state, attempts, expired leases, busy errors, job duration, dead-letter count, database size, and WAL growth/checkpoint behavior. If write contention is common, latency grows, or you need independent multi-host workers, stop adding retry loops and migrate the queue to a service designed for that workload. WAL checkpointing and backups need to include the database’s operational behavior, not just copying a single file while it is live.',
+				],
+				bullets: ['Two claimers never own the same unexpired lease', 'A transaction error rolls back the claim rather than leaving a phantom running job', 'Expired work is reclaimed, and stale owners cannot overwrite the new lease holder', 'A duplicate attempt cannot repeat a financial or otherwise irreversible effect', 'Busy retries are bounded and visible; they do not hide a permanent capacity problem', 'Backups are restorable and include a tested approach for WAL-mode databases', 'A documented migration trigger covers host count, write contention, queue age, and recovery needs'],
+			},
+		],
+	},
+	{
 		slug: 'debug-cdn-cache-with-cache-status-header',
 		title: 'How to Debug a CDN Cache with the Cache-Status Header',
 		seoTitle: 'Debug a CDN Cache with the Cache-Status Header | PilotLab',
